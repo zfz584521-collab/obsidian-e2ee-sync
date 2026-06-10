@@ -11,6 +11,16 @@ export interface S3Config {
   region: string;
 }
 
+/** 同步规则 */
+export interface SyncRule {
+  /** 规则类型 */
+  type: 'include' | 'exclude';
+  /** 路径模式（支持 glob） */
+  pattern: string;
+  /** 是否启用 */
+  enabled: boolean;
+}
+
 /** 插件设置，存储在 data.json */
 export interface SyncSettings {
   /** S3 兼容存储配置 */
@@ -27,6 +37,8 @@ export interface SyncSettings {
   autoSync: boolean;
   /** 同步间隔（秒），0 表示仅手动 */
   syncInterval: number;
+  /** 选择性同步规则 */
+  syncRules: SyncRule[];
 }
 
 /** 默认设置 */
@@ -44,6 +56,11 @@ export const DEFAULT_SETTINGS: SyncSettings = {
   repoId: '',
   autoSync: false,
   syncInterval: 0,
+  syncRules: [
+    { type: 'exclude', pattern: '.obsidian/**', enabled: true },
+    { type: 'exclude', pattern: '.trash/**', enabled: true },
+    { type: 'exclude', pattern: '.*', enabled: true },
+  ],
 };
 
 /** 同步事件类型 */
@@ -145,4 +162,32 @@ export interface DeviceInfo {
   name: string;
   /** 最后活跃时间 */
   lastActive: number;
+}
+
+/** 文件版本信息 */
+export interface FileVersion {
+  /** 版本 ID */
+  versionId: string;
+  /** 文件路径 */
+  path: string;
+  /** 内容哈希 */
+  contentHash: string;
+  /** 文件大小 */
+  size: number;
+  /** 创建时间 */
+  timestamp: number;
+  /** 创建设备 */
+  deviceId: string;
+  /** 设备名称 */
+  deviceName?: string;
+}
+
+/** 版本历史条目 */
+export interface VersionHistoryEntry {
+  /** 文件路径 */
+  path: string;
+  /** 版本列表 */
+  versions: FileVersion[];
+  /** 当前版本 */
+  currentVersionId: string;
 }
