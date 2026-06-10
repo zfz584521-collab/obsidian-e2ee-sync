@@ -205,3 +205,240 @@
   background: var(--background-modifier-error);
   color: var(--text-error);
 }
+
+/* 统计面板 */
+.sync-stats-panel {
+  padding: 20px;
+}
+
+.stats-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.stat-card {
+  background: var(--background-secondary);
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+}
+
+.stat-card-value {
+  font-size: 1.5em;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.stat-card-label {
+  font-size: 0.85em;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.stats-files,
+.stats-time {
+  background: var(--background-secondary);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+/* 版本对比 */
+.version-compare-modal {
+  padding: 20px;
+}
+
+.compare-path {
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+
+.compare-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.compare-side {
+  background: var(--background-secondary);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.compare-content {
+  max-height: 300px;
+  overflow-y: auto;
+  font-family: var(--font-monospace);
+  font-size: 0.85em;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* 冲突解决器 */
+.conflict-resolver-modal {
+  padding: 20px;
+}
+
+.conflict-description {
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+
+.conflict-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.conflict-item {
+  background: var(--background-secondary);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.conflict-path {
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.conflict-times {
+  font-size: 0.85em;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.conflict-times span {
+  margin-right: 16px;
+}
+
+.conflict-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* 日志查看器 */
+.sync-log-viewer {
+  padding: 20px;
+}
+
+.log-filters {
+  margin-bottom: 16px;
+}
+
+.log-stats {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+  font-size: 0.9em;
+}
+
+.stat-error { color: var(--text-error); }
+.stat-warn { color: var(--text-warning); }
+
+.log-list {
+  max-height: 400px;
+  overflow-y: auto;
+  background: var(--background-secondary);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.log-item {
+  padding: 8px 12px;
+  border-radius: 4px;
+  margin-bottom: 4px;
+  font-family: var(--font-monospace);
+  font-size: 0.85em;
+}
+
+.log-item-error { background: var(--background-modifier-error); }
+.log-item-warn { background: var(--background-modifier-warning); }
+
+.log-time {
+  color: var(--text-faint);
+  margin-right: 8px;
+}
+
+.log-level {
+  font-weight: 600;
+  margin-right: 8px;
+}
+
+.log-level-debug { color: var(--text-muted); }
+.log-level-info { color: var(--text-success); }
+.log-level-warn { color: var(--text-warning); }
+.log-level-error { color: var(--text-error); }
+
+.log-message {
+  color: var(--text-normal);
+}
+
+.log-details {
+  margin-top: 8px;
+  padding: 8px;
+  background: var(--background-primary);
+  border-radius: 4px;
+  font-size: 0.85em;
+  white-space: pre-wrap;
+}
+
+/* 移动端适配 */
+.mobile-optimized {
+  --font-size: 16px;
+  --spacing: 16px;
+  --list-item-height: 56px;
+}
+
+.touch-active {
+  opacity: 0.7;
+  transform: scale(0.98);
+  transition: transform 0.1s ease;
+}
+
+@media (max-width: 768px) {
+  .sync-status-panel,
+  .version-history-modal,
+  .sync-log-viewer,
+  .conflict-resolver-modal {
+    padding: 16px;
+  }
+
+  .compare-container {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-overview {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .conflict-actions {
+    flex-direction: column;
+  }
+
+  .log-item {
+    font-size: 0.9em;
+    padding: 12px;
+  }
+}
+
+/* 移动端专用样式 */
+.mobile-only {
+  display: none;
+}
+
+.desktop-only {
+  display: block;
+}
+
+@media (max-width: 768px) {
+  .mobile-only {
+    display: block;
+  }
+
+  .desktop-only {
+    display: none;
+  }
+}
