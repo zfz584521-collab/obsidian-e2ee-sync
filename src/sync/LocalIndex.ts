@@ -136,6 +136,13 @@ export class LocalIndex {
   }
 
   /**
+   * 获取完整索引
+   */
+  getIndex(): Map<string, IndexEntry> {
+    return this.index;
+  }
+
+  /**
    * 检查路径是否应被忽略
    */
   private shouldIgnore(path: string): boolean {
