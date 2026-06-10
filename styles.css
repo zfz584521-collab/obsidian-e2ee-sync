@@ -1,0 +1,23 @@
+/* Sync Plugin Styles */
+
+.sync-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sync-status-idle {
+  color: var(--text-success);
+}
+
+.sync-status-syncing {
+  color: var(--text-accent);
+}
+
+.sync-status-error {
+  color: var(--text-error);
+}
+
+.sync-status-paused {
+  color: var(--text-muted);
+}
