@@ -1,7 +1,7 @@
 import { App, Notice, TFile } from 'obsidian';
-import { SyncSettings, SyncStatus, SyncResult, SyncEvent } from '../types';
+import { EncryptedPackage, RepoMetadata, SyncSettings, SyncStatus, SyncResult, SyncEvent, IndexEntry } from '../types';
 import { LocalIndex } from './LocalIndex';
-import { RemoteStorage } from './RemoteStorage';
+import { RemoteLayoutMigrationResult, RemoteLayoutStatus, RemoteStorage } from './RemoteStorage';
 import { CryptoService } from '../crypto/CryptoService';
 import { ConcurrentQueue } from '../utils/concurrency';
 import { IncrementalSync, SyncStatsCollector } from '../utils/incremental';
@@ -54,6 +54,7 @@ export class SyncManager {
   private localClock: number = 0;
   private statsCollector: SyncStatsCollector;
   private abortController: AbortController | null = null;
+  private static readonly LOCAL_INDEX_KEY = 'local-index';
 
   constructor(
     app: App,
@@ -87,8 +88,10 @@ export class SyncManager {
     // 加载状态
     await this.stateManager.load();
 
-    // 初始化本地索引
+    // 初始化本地索引，并从持久化状态恢复上次成功同步后的基线
     await this.localIndex.initialize();
+    const data = await this.persistence.loadData();
+    this.localIndex.importIndex(data?.[SyncManager.LOCAL_INDEX_KEY] as Record<string, IndexEntry> | undefined);
 
     // 加载本地时钟
     this.localClock = this.stateManager.getLocalClock();
@@ -114,7 +117,32 @@ export class SyncManager {
 
     await this.initCrypto();
     this.remoteStorage.setConfig(this.settings.s3);
+    this.remoteStorage.setNamespace(this.settings.repoId, this.settings.s3.storagePrefix);
     return await this.remoteStorage.testConnection();
+  }
+
+  async detectRemoteLayout(): Promise<RemoteLayoutStatus> {
+    if (!this.isConfigured()) {
+      throw new SyncError(SyncErrorCode.CONFIG_MISSING, 'Sync is not configured');
+    }
+
+    await this.ensureLocalRepoId();
+    this.remoteStorage.setConfig(this.settings.s3);
+    this.remoteStorage.setNamespace(this.settings.repoId, this.settings.s3.storagePrefix);
+    await this.remoteStorage.testConnection();
+    return this.remoteStorage.detectLayout(this.settings.repoId);
+  }
+
+  async migrateLegacyRemoteLayout(): Promise<RemoteLayoutMigrationResult> {
+    if (!this.isConfigured()) {
+      throw new SyncError(SyncErrorCode.CONFIG_MISSING, 'Sync is not configured');
+    }
+
+    await this.ensureLocalRepoId();
+    this.remoteStorage.setConfig(this.settings.s3);
+    this.remoteStorage.setNamespace(this.settings.repoId, this.settings.s3.storagePrefix);
+    await this.remoteStorage.testConnection();
+    return this.remoteStorage.migrateLegacyLayout(this.settings.repoId);
   }
 
   /**
@@ -122,6 +150,8 @@ export class SyncManager {
    */
   private async initCrypto(): Promise<void> {
     if (this.crypto.hasKey()) return;
+
+    await this.ensureLocalRepoId();
 
     if (!this.settings.syncPassword) {
       throw new SyncError(SyncErrorCode.KEY_DERIVATION_FAILED, '同步密码未设置');
@@ -179,27 +209,30 @@ export class SyncManager {
 
       // 连接远端存储
       this.remoteStorage.setConfig(this.settings.s3);
+      this.remoteStorage.setNamespace(this.settings.repoId, this.settings.s3.storagePrefix);
       await this.remoteStorage.testConnection();
 
       // 确保仓库存在
       await this.ensureRepo();
 
-      // 检测变更
+      // 检测本地变更
       this.stateManager.updateProgress({ phase: 'scanning' });
       const changes = await this.detectChanges();
+
+      // 拉取并应用其他设备的远端变更
+      this.stateManager.updateProgress({ phase: 'downloading' });
+      const remoteEvents = this.collapseRemoteEvents(await this.fetchRemoteEvents());
+      const pullResult = await this.applyRemoteEvents(remoteEvents, changes.toUpload);
+      result.downloaded = pullResult.downloaded;
+      result.conflicts = pullResult.conflicts;
 
       // 上传变更（并发）
       this.stateManager.updateProgress({ phase: 'uploading', total: changes.toUpload.length });
       result.uploaded = await this.uploadChangesConcurrent(changes.toUpload);
 
-      // 拉取远端变更（并发）
-      this.stateManager.updateProgress({ phase: 'downloading' });
-      const pullResult = await this.pullRemoteChangesConcurrent(changes.toDownload);
-      result.downloaded = pullResult.downloaded;
-      result.conflicts = pullResult.conflicts;
-
       // 保存状态
       await this.localIndex.save();
+      await this.saveLocalIndex();
       await this.stateManager.completeSync('success');
 
       // 显示统计
@@ -277,7 +310,7 @@ export class SyncManager {
           if (change.type === 'delete') {
             await this.deleteFile(change.path);
           } else {
-            await this.uploadFile(change.path);
+            await this.uploadFile(change.path, change.type);
           }
           uploaded++;
           this.statsCollector.recordFile(0);
@@ -300,7 +333,7 @@ export class SyncManager {
   /**
    * 上传单个文件
    */
-  private async uploadFile(path: string): Promise<void> {
+  private async uploadFile(path: string, type: 'create' | 'modify'): Promise<void> {
     const file = this.app.vault.getAbstractFileByPath(path);
     if (!(file instanceof TFile)) {
       throw new SyncError(SyncErrorCode.FILE_NOT_FOUND, `文件不存在：${path}`);
@@ -316,23 +349,26 @@ export class SyncManager {
 
     // 加密
     const encryptedPackage = await this.crypto.encryptData(contentBytes);
-    const encryptedPath = await this.crypto.encryptPath(path);
+    const remoteKey = await this.crypto.getStablePathKey(path);
 
     // 序列化
     const packageJson = JSON.stringify(encryptedPackage);
     const packageBytes = new TextEncoder().encode(packageJson);
 
     // 上传
-    const versionId = await this.remoteStorage.upload(encryptedPath, packageBytes);
+    const versionId = await this.remoteStorage.upload(remoteKey, packageBytes);
 
     // 更新索引
     await this.localIndex.updateIndex(path);
 
     // 记录事件
     await this.appendEvent({
-      type: 'create',
+      type,
       path: path,
+      remoteKey,
       contentHash: encryptedPackage.meta.contentHash,
+      size: file.stat.size,
+      mtime: file.stat.mtime,
     });
 
     console.log(`[同步管理器] 已上传：${path} (v${versionId})`);
@@ -342,36 +378,132 @@ export class SyncManager {
    * 删除远端文件
    */
   private async deleteFile(path: string): Promise<void> {
-    const encryptedPath = await this.crypto.encryptPath(path);
-    await this.remoteStorage.delete(encryptedPath);
+    const remoteKey = await this.crypto.getStablePathKey(path);
+    await this.remoteStorage.delete(remoteKey);
     this.localIndex.removeFromIndex(path);
 
-    await this.appendEvent({ type: 'delete', path });
+    await this.appendEvent({ type: 'delete', path, remoteKey });
     console.log(`[同步管理器] 已删除：${path}`);
   }
 
   /**
-   * 并发拉取远端变更
+   * 拉取其他设备尚未处理的事件日志
    */
-  private async pullRemoteChangesConcurrent(
-    _paths: string[]
+  private async fetchRemoteEvents(): Promise<SyncEvent[]> {
+    const metadata = await this.remoteStorage.getRepoMetadata(this.settings.repoId) as RepoMetadata | null;
+    if (!metadata?.devices) return [];
+
+    const events: SyncEvent[] = [];
+
+    for (const device of metadata.devices) {
+      if (!device.deviceId || device.deviceId === this.settings.deviceId) continue;
+
+      const fromClock = this.stateManager.getRemoteClock(device.deviceId);
+      const logKeys = await this.remoteStorage.listDeviceLogs(device.deviceId, fromClock);
+
+      for (const logKey of logKeys.sort()) {
+        const logBytes = await this.remoteStorage.downloadLog(logKey);
+        const encryptedEvent = JSON.parse(new TextDecoder().decode(logBytes)) as EncryptedPackage;
+        const eventBytes = await this.crypto.decryptData(encryptedEvent);
+        const event = JSON.parse(new TextDecoder().decode(eventBytes)) as SyncEvent;
+        events.push(event);
+      }
+    }
+
+    return events.sort((a, b) => a.timestamp - b.timestamp || a.clock - b.clock);
+  }
+
+  private collapseRemoteEvents(events: SyncEvent[]): SyncEvent[] {
+    const latestByPath = new Map<string, SyncEvent>();
+
+    for (const event of events) {
+      const existing = latestByPath.get(event.path);
+      if (
+        !existing ||
+        event.timestamp > existing.timestamp ||
+        (event.timestamp === existing.timestamp && event.clock > existing.clock)
+      ) {
+        latestByPath.set(event.path, event);
+      }
+    }
+
+    return Array.from(latestByPath.values()).sort(
+      (a, b) => a.timestamp - b.timestamp || a.clock - b.clock
+    );
+  }
+
+  /**
+   * 应用远端事件。若本地同一路径也有未上传变更，则保存冲突副本，不覆盖本地文件。
+   */
+  private async applyRemoteEvents(
+    events: SyncEvent[],
+    localChanges: Array<{ path: string; type: 'create' | 'modify' | 'delete' }>
   ): Promise<{ downloaded: number; conflicts: number }> {
-    // TODO: 实现完整的远端同步
-    return { downloaded: 0, conflicts: 0 };
+    let downloaded = 0;
+    let conflicts = 0;
+    const localChangedPaths = new Set(localChanges.map(change => change.path));
+
+    this.stateManager.updateProgress({ total: events.length, processed: 0 });
+
+    for (let i = 0; i < events.length; i++) {
+      const event = events[i];
+      this.stateManager.updateProgress({
+        processed: i + 1,
+        currentFile: event.path,
+      });
+
+      if (event.type === 'delete') {
+        if (localChangedPaths.has(event.path)) {
+          conflicts++;
+          console.warn(`[同步管理器] 跳过远端删除，本地存在未同步变更：${event.path}`);
+        } else {
+          await this.deleteLocalFile(event.path);
+          this.localIndex.removeFromIndex(event.path);
+          downloaded++;
+        }
+        this.stateManager.updateRemoteClock(event.deviceId, event.clock);
+        continue;
+      }
+
+      if (!event.remoteKey) {
+        event.remoteKey = await this.crypto.getStablePathKey(event.path);
+      }
+
+      const { data } = await this.remoteStorage.download(event.remoteKey);
+      const encryptedPackage = JSON.parse(new TextDecoder().decode(data)) as EncryptedPackage;
+      const plaintext = await this.crypto.decryptData(encryptedPackage);
+
+      if (localChangedPaths.has(event.path)) {
+        const conflictPath = await this.writeConflictCopy(event.path, plaintext, event);
+        console.warn(`[同步管理器] 已保存冲突副本：${conflictPath}`);
+        conflicts++;
+      } else {
+        await this.writeLocalFile(event.path, plaintext);
+        await this.localIndex.updateIndex(event.path);
+        downloaded++;
+      }
+
+      this.stateManager.updateRemoteClock(event.deviceId, event.clock);
+    }
+
+    return { downloaded, conflicts };
   }
 
   /**
    * 确保仓库元数据存在
    */
   private async ensureRepo(): Promise<void> {
-    if (!this.settings.repoId) {
-      this.settings.repoId = this.crypto.generateRepoId();
-      await this.persistence.saveSettings();
-      console.log('[同步管理器] 创建新仓库：', this.settings.repoId);
-    }
+    await this.ensureLocalRepoId();
 
-    const metadata = await this.remoteStorage.getRepoMetadata(this.settings.repoId);
+    const metadata = await this.remoteStorage.getRepoMetadata(this.settings.repoId) as RepoMetadata | null;
     if (!metadata) {
+      if (await this.remoteStorage.hasLegacyRepoMetadata(this.settings.repoId)) {
+        throw new SyncError(
+          SyncErrorCode.REMOTE_LAYOUT_MIGRATION_REQUIRED,
+          '检测到旧版远端对象布局。为避免跨仓库串数据或误建空仓库，请先迁移旧数据，或使用新的 repoId/storagePrefix 重新初始化。'
+        );
+      }
+
       await this.remoteStorage.createRepoMetadata(this.settings.repoId, {
         repoId: this.settings.repoId,
         protocolVersion: '1.0.0',
@@ -384,7 +516,33 @@ export class SyncManager {
         retentionDays: 30,
       });
       console.log('[同步管理器] 仓库元数据已创建');
+      return;
     }
+
+    const devices = metadata.devices || [];
+    const existing = devices.find(d => d.deviceId === this.settings.deviceId);
+    if (existing) {
+      existing.name = this.settings.deviceName || existing.name || 'Unknown Device';
+      existing.lastActive = Date.now();
+    } else {
+      devices.push({
+        deviceId: this.settings.deviceId,
+        name: this.settings.deviceName || 'Unknown Device',
+        lastActive: Date.now(),
+      });
+    }
+    await this.remoteStorage.createRepoMetadata(this.settings.repoId, {
+      ...metadata,
+      devices,
+    });
+  }
+
+  private async ensureLocalRepoId(): Promise<void> {
+    if (this.settings.repoId) return;
+
+    this.settings.repoId = this.crypto.generateRepoId();
+    await this.persistence.saveSettings();
+    console.log('[同步管理器] 创建新仓库：', this.settings.repoId);
   }
 
   /**
@@ -399,7 +557,10 @@ export class SyncManager {
       clock: this.localClock,
       type: event.type || 'modify',
       path: event.path || '',
+      remoteKey: event.remoteKey,
       contentHash: event.contentHash,
+      size: event.size,
+      mtime: event.mtime,
       oldPath: event.oldPath,
       parentId: event.parentId || '',
       timestamp: Date.now(),
@@ -411,6 +572,69 @@ export class SyncManager {
 
     await this.remoteStorage.uploadLog(this.settings.deviceId, logData, this.localClock);
     this.stateManager.updateLocalClock(this.localClock);
+  }
+
+  /**
+   * 保存本地同步基线
+   */
+  private async saveLocalIndex(): Promise<void> {
+    const existing = await this.persistence.loadData() || {};
+    existing[SyncManager.LOCAL_INDEX_KEY] = this.localIndex.exportIndex();
+    await this.persistence.saveData(existing);
+  }
+
+  /**
+   * 写入远端文件到本地仓库
+   */
+  private async writeLocalFile(path: string, data: Uint8Array): Promise<void> {
+    await this.ensureParentFolders(path);
+    await this.app.vault.adapter.writeBinary(path, this.toArrayBuffer(data));
+  }
+
+  /**
+   * 删除本地文件
+   */
+  private async deleteLocalFile(path: string): Promise<void> {
+    if (await this.app.vault.adapter.exists(path)) {
+      await this.app.vault.adapter.remove(path);
+    }
+  }
+
+  /**
+   * 保存冲突副本，避免覆盖本地未同步内容
+   */
+  private async writeConflictCopy(path: string, data: Uint8Array, event: SyncEvent): Promise<string> {
+    const conflictPath = this.getConflictPath(path, event);
+    await this.writeLocalFile(conflictPath, data);
+    return conflictPath;
+  }
+
+  private getConflictPath(path: string, event: SyncEvent): string {
+    const slash = path.lastIndexOf('/');
+    const dir = slash >= 0 ? `${path.slice(0, slash + 1)}` : '';
+    const name = slash >= 0 ? path.slice(slash + 1) : path;
+    const dot = name.lastIndexOf('.');
+    const base = dot > 0 ? name.slice(0, dot) : name;
+    const ext = dot > 0 ? name.slice(dot) : '';
+    const timestamp = new Date(event.timestamp).toISOString().replace(/[:.]/g, '-');
+    const device = event.deviceId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 12) || 'remote';
+    return `${dir}${base} (冲突 ${device} ${timestamp})${ext}`;
+  }
+
+  private async ensureParentFolders(path: string): Promise<void> {
+    const parts = path.split('/').slice(0, -1);
+    let current = '';
+
+    for (const part of parts) {
+      current = current ? `${current}/${part}` : part;
+      if (!(await this.app.vault.adapter.exists(current))) {
+        await this.app.vault.adapter.mkdir(current);
+      }
+    }
+  }
+
+  private toArrayBuffer(data: Uint8Array): ArrayBuffer {
+    return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
   }
 
   /**

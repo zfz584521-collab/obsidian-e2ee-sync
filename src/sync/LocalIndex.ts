@@ -22,9 +22,8 @@ export class LocalIndex {
    */
   async initialize(): Promise<void> {
     console.log('[本地索引] 正在初始化...');
-    // TODO: 从磁盘加载现有索引
-    // 目前从头开始
-    await this.scanAllFiles();
+    // 索引表示“上次成功同步后的基线”。
+    // 如果没有持久化基线，应保持为空，让首次同步把当前文件识别为待上传。
   }
 
   /**
@@ -143,6 +142,19 @@ export class LocalIndex {
   }
 
   /**
+   * 从持久化数据恢复索引
+   */
+  importIndex(entries: Record<string, IndexEntry> | undefined): void {
+    this.index.clear();
+    if (!entries) return;
+
+    for (const [path, entry] of Object.entries(entries)) {
+      this.index.set(path, entry);
+    }
+    console.log(`[本地索引] 已恢复 ${this.index.size} 个索引条目`);
+  }
+
+  /**
    * 检查路径是否应被忽略
    */
   private shouldIgnore(path: string): boolean {
@@ -169,7 +181,6 @@ export class LocalIndex {
    * 保存索引到磁盘
    */
   async save(): Promise<void> {
-    // TODO: 实现持久化
     console.log('[本地索引] 正在保存索引...');
   }
 

@@ -33,6 +33,7 @@ export enum SyncErrorCode {
   SYNC_IN_PROGRESS = 'SYNC_IN_PROGRESS',
   SYNC_CONFLICT = 'SYNC_CONFLICT',
   SYNC_ABORTED = 'SYNC_ABORTED',
+  REMOTE_LAYOUT_MIGRATION_REQUIRED = 'REMOTE_LAYOUT_MIGRATION_REQUIRED',
 
   // 未知错误
   UNKNOWN = 'UNKNOWN',
@@ -94,6 +95,7 @@ export class SyncError extends Error {
       [SyncErrorCode.SYNC_IN_PROGRESS]: '同步正在进行中',
       [SyncErrorCode.SYNC_CONFLICT]: '检测到同步冲突',
       [SyncErrorCode.SYNC_ABORTED]: '同步已中止',
+      [SyncErrorCode.REMOTE_LAYOUT_MIGRATION_REQUIRED]: '检测到旧版远端数据布局，请先迁移或重新初始化同步仓库',
 
       [SyncErrorCode.UNKNOWN]: '未知错误',
     };

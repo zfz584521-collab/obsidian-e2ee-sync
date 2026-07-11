@@ -16,6 +16,27 @@ import {
 import { S3Config } from '../types';
 import { withRetry, DEFAULT_RETRY_CONFIG, RetryConfig } from '../utils/retry';
 import { SyncError, SyncErrorCode } from '../utils/errors';
+import { ObsidianHttpHandler } from './ObsidianHttpHandler';
+
+export function shouldForcePathStyle(endpoint: string): boolean {
+  const hostname = new URL(endpoint).hostname.toLowerCase();
+  return !(
+    hostname === 'amazonaws.com' ||
+    hostname.endsWith('.amazonaws.com') ||
+    hostname === 'aliyuncs.com' ||
+    hostname.endsWith('.aliyuncs.com')
+  );
+}
+
+export interface RemoteLayoutStatus {
+  currentLayout: boolean;
+  legacyLayout: boolean;
+}
+
+export interface RemoteLayoutMigrationResult {
+  copied: number;
+  skipped: number;
+}
 
 /**
  * 远端存储服务
@@ -25,6 +46,8 @@ export class RemoteStorage {
   private config: S3Config | null = null;
   private client: S3Client | null = null;
   private connected: boolean = false;
+  private repoId: string | null = null;
+  private storagePrefix: string = '';
 
   /** 内容对象前缀 */
   private static readonly CONTENT_PREFIX = 'content/';
@@ -49,6 +72,7 @@ export class RemoteStorage {
    */
   setConfig(config: S3Config): void {
     this.config = config;
+    this.storagePrefix = this.normalizeStoragePrefix(config.storagePrefix || '');
     console.log('[远端存储] 已设置配置，端点：', config.endpoint);
 
     this.client = new S3Client({
@@ -58,13 +82,19 @@ export class RemoteStorage {
         accessKeyId: config.accessKey,
         secretAccessKey: config.secretKey,
       },
-      forcePathStyle: !config.endpoint.includes('amazonaws.com'),
-      // 请求超时设置
-      requestHandler: {
-        requestTimeout: 30000,
-        httpsAgent: undefined,
-      } as any,
+      forcePathStyle: shouldForcePathStyle(config.endpoint),
+      requestHandler: new ObsidianHttpHandler(),
     });
+  }
+
+  /**
+   * Scope all remote objects to a repository namespace.
+   */
+  setNamespace(repoId: string, storagePrefix?: string): void {
+    this.repoId = repoId;
+    if (storagePrefix !== undefined) {
+      this.storagePrefix = this.normalizeStoragePrefix(storagePrefix);
+    }
   }
 
   /**
@@ -126,7 +156,7 @@ export class RemoteStorage {
    * 简单上传
    */
   private async simpleUpload(key: string, data: Uint8Array): Promise<string> {
-    const fullKey = `${RemoteStorage.CONTENT_PREFIX}${key}`;
+    const fullKey = this.contentObjectKey(key);
 
     try {
       return await withRetry(
@@ -157,7 +187,7 @@ export class RemoteStorage {
    * 分块上传（大文件）
    */
   private async multipartUpload(key: string, data: Uint8Array): Promise<string> {
-    const fullKey = `${RemoteStorage.CONTENT_PREFIX}${key}`;
+    const fullKey = this.contentObjectKey(key);
     const totalParts = Math.ceil(data.length / RemoteStorage.PART_SIZE);
 
     console.log(`[远端存储] 开始分块上传，共 ${totalParts} 块`);
@@ -243,7 +273,7 @@ export class RemoteStorage {
     try {
       return await withRetry(
         async () => {
-          const fullKey = `${RemoteStorage.CONTENT_PREFIX}${key}`;
+          const fullKey = this.contentObjectKey(key);
           const command = new GetObjectCommand({
             Bucket: this.config!.bucket,
             Key: fullKey,
@@ -280,7 +310,7 @@ export class RemoteStorage {
     }
 
     try {
-      const fullKey = `${RemoteStorage.CONTENT_PREFIX}${key}`;
+      const fullKey = this.contentObjectKey(key);
       const command = new HeadObjectCommand({
         Bucket: this.config.bucket,
         Key: fullKey,
@@ -355,7 +385,7 @@ export class RemoteStorage {
     try {
       await withRetry(
         async () => {
-          const fullKey = `${RemoteStorage.CONTENT_PREFIX}${key}`;
+          const fullKey = this.contentObjectKey(key);
           const command = new DeleteObjectCommand({
             Bucket: this.config!.bucket,
             Key: fullKey,
@@ -381,7 +411,7 @@ export class RemoteStorage {
       throw new SyncError(SyncErrorCode.CONFIG_MISSING, '未连接到远端存储');
     }
 
-    const key = `${RemoteStorage.LOG_PREFIX}${deviceId}/${clock}.json`;
+    const key = this.logObjectKey(deviceId, clock);
 
     try {
       await withRetry(
@@ -406,7 +436,7 @@ export class RemoteStorage {
    * 获取设备日志列表
    */
   async listDeviceLogs(deviceId: string, fromClock?: number): Promise<string[]> {
-    const prefix = `${RemoteStorage.LOG_PREFIX}${deviceId}/`;
+    const prefix = this.logObjectPrefix(deviceId);
     const logs = await this.list(prefix);
 
     if (fromClock !== undefined) {
@@ -423,6 +453,34 @@ export class RemoteStorage {
   }
 
   /**
+   * 下载设备事件日志
+   */
+  async downloadLog(logKey: string): Promise<Uint8Array> {
+    if (!this.client || !this.config) {
+      throw new SyncError(SyncErrorCode.CONFIG_MISSING, '未连接到远端存储');
+    }
+
+    try {
+      return await withRetry(
+        async () => {
+          const command = new GetObjectCommand({
+            Bucket: this.config!.bucket,
+            Key: logKey,
+          });
+          const result = await this.client!.send(command);
+          if (!result.Body) {
+            throw new SyncError(SyncErrorCode.FILE_NOT_FOUND, '日志内容为空');
+          }
+          return this.streamToUint8Array(result.Body);
+        },
+        this.retryConfig
+      );
+    } catch (error) {
+      throw SyncError.fromError(error);
+    }
+  }
+
+  /**
    * 创建仓库元数据
    */
   async createRepoMetadata(repoId: string, metadata: Record<string, unknown>): Promise<void> {
@@ -430,7 +488,7 @@ export class RemoteStorage {
       throw new SyncError(SyncErrorCode.CONFIG_MISSING, '未连接到远端存储');
     }
 
-    const key = `${RemoteStorage.META_PREFIX}repo/${repoId}.json`;
+    const key = this.repoMetadataObjectKey(repoId);
 
     try {
       await withRetry(
@@ -460,7 +518,7 @@ export class RemoteStorage {
     }
 
     try {
-      const key = `${RemoteStorage.META_PREFIX}repo/${repoId}.json`;
+      const key = this.repoMetadataObjectKey(repoId);
       const command = new GetObjectCommand({
         Bucket: this.config.bucket,
         Key: key,
@@ -480,8 +538,73 @@ export class RemoteStorage {
   }
 
   /**
+   * Detect pre-namespace repository metadata so upgrades do not silently create
+   * a fresh empty repo while old data still exists in the bucket.
+   */
+  async hasLegacyRepoMetadata(repoId: string): Promise<boolean> {
+    if (!this.client || !this.config) {
+      return false;
+    }
+
+    try {
+      const command = new HeadObjectCommand({
+        Bucket: this.config.bucket,
+        Key: `${RemoteStorage.META_PREFIX}repo/${repoId}.json`,
+      });
+      await this.client.send(command);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * 将流转换为 Uint8Array
    */
+  async detectLayout(repoId: string): Promise<RemoteLayoutStatus> {
+    return {
+      currentLayout: await this.hasObject(this.repoMetadataObjectKey(repoId)),
+      legacyLayout: await this.hasObject(this.legacyRepoMetadataObjectKey(repoId)),
+    };
+  }
+
+  async migrateLegacyLayout(repoId: string): Promise<RemoteLayoutMigrationResult> {
+    if (!this.client || !this.config) {
+      throw new SyncError(SyncErrorCode.CONFIG_MISSING, '鏈繛鎺ュ埌杩滅瀛樺偍');
+    }
+
+    const legacyMetadataKey = this.legacyRepoMetadataObjectKey(repoId);
+    if (!(await this.hasObject(legacyMetadataKey))) {
+      throw new SyncError(SyncErrorCode.FILE_NOT_FOUND, 'Legacy repository metadata not found');
+    }
+
+    const oldKeys = [
+      legacyMetadataKey,
+      ...(await this.list(RemoteStorage.CONTENT_PREFIX)),
+      ...(await this.list(RemoteStorage.LOG_PREFIX)),
+    ];
+
+    let copied = 0;
+    let skipped = 0;
+
+    for (const oldKey of Array.from(new Set(oldKeys)).sort()) {
+      const newKey = this.mapLegacyKeyToCurrentNamespace(oldKey, repoId);
+      if (!newKey) continue;
+
+      if (await this.hasObject(newKey)) {
+        skipped++;
+        continue;
+      }
+
+      const data = await this.downloadObject(oldKey);
+      const contentType = oldKey.endsWith('.json') ? 'application/json' : 'application/octet-stream';
+      await this.uploadObject(newKey, data, contentType);
+      copied++;
+    }
+
+    return { copied, skipped };
+  }
+
   private async streamToUint8Array(body: unknown): Promise<Uint8Array> {
     if (body && typeof body === 'object' && 'toArray' in body) {
       const buffer = await (body as { toArray: () => Promise<Uint8Array> }).toArray();
@@ -515,6 +638,95 @@ export class RemoteStorage {
     }
 
     throw new SyncError(SyncErrorCode.UNKNOWN, '无法识别的响应体类型');
+  }
+
+  private contentObjectKey(key: string): string {
+    return `${this.namespacePrefix()}${RemoteStorage.CONTENT_PREFIX}${key}`;
+  }
+
+  private logObjectPrefix(deviceId: string): string {
+    return `${this.namespacePrefix()}${RemoteStorage.LOG_PREFIX}${encodeURIComponent(deviceId)}/`;
+  }
+
+  private logObjectKey(deviceId: string, clock: number): string {
+    return `${this.logObjectPrefix(deviceId)}${clock}.json`;
+  }
+
+  private repoMetadataObjectKey(repoId: string): string {
+    return `${this.namespacePrefix(repoId)}${RemoteStorage.META_PREFIX}repo.json`;
+  }
+
+  private legacyRepoMetadataObjectKey(repoId: string): string {
+    return `${RemoteStorage.META_PREFIX}repo/${repoId}.json`;
+  }
+
+  private mapLegacyKeyToCurrentNamespace(oldKey: string, repoId: string): string | null {
+    if (oldKey === this.legacyRepoMetadataObjectKey(repoId)) {
+      return this.repoMetadataObjectKey(repoId);
+    }
+
+    if (oldKey.startsWith(RemoteStorage.CONTENT_PREFIX)) {
+      return `${this.namespacePrefix(repoId)}${oldKey}`;
+    }
+
+    if (oldKey.startsWith(RemoteStorage.LOG_PREFIX)) {
+      return `${this.namespacePrefix(repoId)}${oldKey}`;
+    }
+
+    return null;
+  }
+
+  private async hasObject(key: string): Promise<boolean> {
+    if (!this.client || !this.config) {
+      return false;
+    }
+
+    try {
+      const command = new HeadObjectCommand({
+        Bucket: this.config.bucket,
+        Key: key,
+      });
+      await this.client.send(command);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async downloadObject(key: string): Promise<Uint8Array> {
+    const command = new GetObjectCommand({
+      Bucket: this.config!.bucket,
+      Key: key,
+    });
+    const result = await this.client!.send(command);
+    if (!result.Body) {
+      throw new SyncError(SyncErrorCode.FILE_NOT_FOUND, `Object is empty: ${key}`);
+    }
+    return this.streamToUint8Array(result.Body);
+  }
+
+  private async uploadObject(key: string, data: Uint8Array, contentType: string): Promise<void> {
+    const command = new PutObjectCommand({
+      Bucket: this.config!.bucket,
+      Key: key,
+      Body: data,
+      ContentType: contentType,
+    });
+    await this.client!.send(command);
+  }
+
+  private namespacePrefix(repoId: string | null = this.repoId): string {
+    if (!repoId) return '';
+
+    const channelPrefix = this.storagePrefix ? `${this.storagePrefix}/` : '';
+    return `${channelPrefix}repos/${encodeURIComponent(repoId)}/`;
+  }
+
+  private normalizeStoragePrefix(prefix: string): string {
+    return prefix
+      .trim()
+      .replace(/^\/+/, '')
+      .replace(/\/+$/, '');
   }
 
   /**

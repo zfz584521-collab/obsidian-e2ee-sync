@@ -122,6 +122,31 @@ describe('CryptoService', () => {
     });
   });
 
+  describe('getStablePathKey', () => {
+    it('同一密码、盐和路径应产生相同远端 key', async () => {
+      const salt = new Uint8Array(32).fill(7);
+      await crypto.deriveKey('test-password', salt);
+
+      const crypto2 = new CryptoService();
+      await crypto2.deriveKey('test-password', salt);
+
+      const key1 = await crypto.getStablePathKey('notes/daily.md');
+      const key2 = await crypto2.getStablePathKey('notes/daily.md');
+
+      expect(key1).toBe(key2);
+      expect(key1).not.toContain('daily');
+    });
+
+    it('不同路径应产生不同远端 key', async () => {
+      await crypto.deriveKey('test-password', new Uint8Array(32).fill(8));
+
+      const key1 = await crypto.getStablePathKey('notes/a.md');
+      const key2 = await crypto.getStablePathKey('notes/b.md');
+
+      expect(key1).not.toBe(key2);
+    });
+  });
+
   describe('hash', () => {
     it('应该计算 SHA-256 哈希', async () => {
       const data = new TextEncoder().encode('test data');

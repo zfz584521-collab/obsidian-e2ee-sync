@@ -6,6 +6,7 @@ import { EncryptionMetadata, EncryptedPackage } from '../types';
  */
 export class CryptoService {
   private key: CryptoKey | null = null;
+  private pathKey: CryptoKey | null = null;
   private salt: Uint8Array | null = null;
 
   /** 加密算法 */
@@ -57,6 +58,23 @@ export class CryptoService {
       },
       false, // 不可导出
       ['encrypt', 'decrypt']
+    );
+
+    this.pathKey = await crypto.subtle.deriveKey(
+      {
+        name: 'PBKDF2',
+        salt: this.salt.buffer as ArrayBuffer,
+        iterations: CryptoService.ITERATIONS,
+        hash: 'SHA-256',
+      },
+      keyMaterial,
+      {
+        name: 'HMAC',
+        hash: 'SHA-256',
+        length: CryptoService.KEY_LENGTH,
+      },
+      false,
+      ['sign']
     );
 
     console.log('[加密服务] 密钥派生完成');
@@ -247,6 +265,21 @@ export class CryptoService {
   }
 
   /**
+   * 为文件路径生成稳定的远端对象 key。
+   * 同一同步密码、仓库 ID 和路径会得到相同 key，服务端无法直接看到明文路径。
+   */
+  async getStablePathKey(path: string): Promise<string> {
+    if (!this.pathKey) {
+      throw new Error('密钥未派生');
+    }
+
+    const normalizedPath = path.replace(/\\/g, '/');
+    const data = new TextEncoder().encode(`path:v1:${normalizedPath}`);
+    const signature = await crypto.subtle.sign('HMAC', this.pathKey, data);
+    return this.base64UrlEncode(new Uint8Array(signature));
+  }
+
+  /**
    * 计算 SHA-256 哈希
    */
   async hash(data: Uint8Array): Promise<string> {
@@ -337,6 +370,7 @@ export class CryptoService {
    */
   clearKey(): void {
     this.key = null;
+    this.pathKey = null;
     this.salt = null;
     console.log('[加密服务] 密钥已清除');
   }

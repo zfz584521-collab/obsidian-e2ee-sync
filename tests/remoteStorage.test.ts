@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { RemoteStorage } from '../src/sync/RemoteStorage';
+
+vi.mock('obsidian', () => ({
+  requestUrl: vi.fn(),
+}));
+
+import { RemoteStorage, shouldForcePathStyle } from '../src/sync/RemoteStorage';
 
 // 不实际连接 S3，只测试基本逻辑
 describe('RemoteStorage', () => {
@@ -36,5 +41,15 @@ describe('RemoteStorage', () => {
       storage.destroy();
       expect(storage.isConnected()).toBe(false);
     });
+  });
+});
+
+describe('shouldForcePathStyle', () => {
+  it('uses virtual-hosted style for Alibaba Cloud OSS endpoints', () => {
+    expect(shouldForcePathStyle('https://oss-cn-hangzhou.aliyuncs.com')).toBe(false);
+  });
+
+  it('keeps path-style requests for generic S3-compatible endpoints', () => {
+    expect(shouldForcePathStyle('https://minio.example.com')).toBe(true);
   });
 });

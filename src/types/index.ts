@@ -9,6 +9,8 @@ export interface S3Config {
   accessKey: string;
   secretKey: string;
   region: string;
+  /** Optional remote object prefix, used to isolate channels inside the same bucket. */
+  storagePrefix?: string;
 }
 
 /** 同步规则 */
@@ -49,6 +51,7 @@ export const DEFAULT_SETTINGS: SyncSettings = {
     accessKey: '',
     secretKey: '',
     region: 'auto',
+    storagePrefix: '',
   },
   syncPassword: '',
   deviceId: '',
@@ -78,8 +81,14 @@ export interface SyncEvent {
   type: SyncEventType;
   /** 文件路径（加密后） */
   path: string;
+  /** 远端内容对象 key（不含 content/ 前缀） */
+  remoteKey?: string;
   /** 内容哈希（用于创建/修改） */
   contentHash?: string;
+  /** 文件大小（字节） */
+  size?: number;
+  /** 文件最后修改时间 */
+  mtime?: number;
   /** 旧路径（用于移动） */
   oldPath?: string;
   /** 父事件 ID，用于因果排序 */

@@ -236,6 +236,20 @@ export class SyncStateManager {
   }
 
   /**
+   * 更新指定远端设备已处理时钟
+   */
+  updateRemoteClock(deviceId: string, clock: number): void {
+    this.state.remoteClocks[deviceId] = Math.max(this.state.remoteClocks[deviceId] || 0, clock);
+  }
+
+  /**
+   * 获取指定远端设备已处理时钟
+   */
+  getRemoteClock(deviceId: string): number {
+    return this.state.remoteClocks[deviceId] || 0;
+  }
+
+  /**
    * 获取本地时钟
    */
   getLocalClock(): number {
