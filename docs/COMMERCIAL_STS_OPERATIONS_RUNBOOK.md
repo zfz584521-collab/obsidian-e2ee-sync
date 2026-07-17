@@ -327,6 +327,7 @@ AccessKey 只放服务器环境变量。
 授权接口请求体限制为 16 KiB。
 客户端 repoId 在进入 STS Policy 前必须规范为单一路径段。
 未知后端错误文本不得直接展示给用户或写入日志。
+监控应定期检查 /healthz 和 /readyz；/readyz 只允许输出 provider、存储类型和脱敏计数。
 ```
 
 ## 十、最小商业闭环

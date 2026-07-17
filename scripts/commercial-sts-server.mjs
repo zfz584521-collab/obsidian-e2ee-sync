@@ -207,6 +207,16 @@ export async function handleCommercialStsRequest(request, response, {
     return;
   }
 
+  if (request.method === 'GET' && request.url === '/readyz') {
+    sendJson(response, 200, {
+      status: 'ready',
+      provider: config.provider,
+      store: config.storePath ? 'persistent' : 'memory',
+      counts: store.getOperationalStats(),
+    });
+    return;
+  }
+
   if (request.method === 'OPTIONS') {
     sendJson(response, 204, {});
     return;

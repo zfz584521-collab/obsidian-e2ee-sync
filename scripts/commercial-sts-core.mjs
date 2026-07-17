@@ -173,6 +173,15 @@ export class InMemoryCommercialStore {
       : this.auditLogs;
     return filtered.slice(-limit).reverse().map(event => ({ ...event }));
   }
+
+  getOperationalStats() {
+    return {
+      users: this.users.size,
+      tokens: this.tokens.size,
+      devices: this.devices.size,
+      auditLogs: this.auditLogs.length,
+    };
+  }
 }
 
 export function createCredentialResponse({ userId, vaultId, repoId, oss, credentials, now = Date.now() }) {

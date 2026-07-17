@@ -39,12 +39,29 @@ openssl rand -hex 32
 docker compose up -d --build
 docker compose ps
 curl --fail https://你的授权域名/healthz
+curl --fail https://你的授权域名/readyz
 ```
 
 健康检查只返回：
 
 ```json
 {"status":"ok"}
+```
+
+就绪检查返回 provider、存储类型和脱敏计数，不包含 bucket、endpoint、授权令牌或设备明文：
+
+```json
+{
+  "status": "ready",
+  "provider": "aliyun",
+  "store": "persistent",
+  "counts": {
+    "users": 1,
+    "tokens": 1,
+    "devices": 0,
+    "auditLogs": 0
+  }
+}
 ```
 
 ## 四、创建首位用户

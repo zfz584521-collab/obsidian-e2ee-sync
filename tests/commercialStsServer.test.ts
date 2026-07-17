@@ -142,6 +142,52 @@ describe('commercial STS server', () => {
     expect(await response.json()).toEqual({ status: 'ok' });
   });
 
+  it('serves a redacted readiness check with operational counters', async () => {
+    const config = loadServerConfig({
+      OSS_BUCKET: 'obsidian-sync-commercial',
+      SEED_USER_ID: 'u_10001',
+      SEED_AUTH_TOKEN: 'ready-token',
+      STS_PROVIDER: 'mock',
+    });
+    const store = createSeedStore(config);
+    server = createCommercialStsServer({
+      config,
+      store,
+      assumeRoleProvider: createMockAssumeRoleProvider(),
+    });
+    const baseUrl = await listen(server);
+
+    await fetch(`${baseUrl}/api/sync/credentials`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer ready-token',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        vaultId: 'main',
+        deviceId: 'dev_ready_check',
+      }),
+    });
+    const response = await fetch(`${baseUrl}/readyz`);
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json).toEqual({
+      status: 'ready',
+      provider: 'mock',
+      store: 'memory',
+      counts: {
+        users: 1,
+        tokens: 1,
+        devices: 1,
+        auditLogs: 1,
+      },
+    });
+    expect(JSON.stringify(json)).not.toContain('ready-token');
+    expect(JSON.stringify(json)).not.toContain('dev_ready_check');
+    expect(JSON.stringify(json)).not.toContain('obsidian-sync-commercial');
+  });
+
   it('issues plugin credential responses for authorized seed users', async () => {
     const config = loadServerConfig({
       OSS_BUCKET: 'obsidian-sync-commercial',
