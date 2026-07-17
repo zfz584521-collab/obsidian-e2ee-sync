@@ -13,6 +13,7 @@
     "preflight:commercial-sts": "node scripts/commercial-sts-preflight.mjs",
     "smoke:aliyun-sts": "node scripts/aliyun-sts-smoke.mjs",
     "smoke:aliyun-oss-sts": "node scripts/aliyun-oss-sts-smoke.mjs",
+    "package": "npm run build && node scripts/package-plugin.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
