@@ -66,6 +66,14 @@ chmod 600 ./issued-customer_001.secret
 docker compose exec backend rm -f /app/data/issued-customer_001.secret
 ```
 
+签发 30 天有效令牌时，在用户 ID 后追加天数：
+
+```bash
+docker compose exec \
+  -e TOKEN_OUTPUT_FILE=/app/data/issued-customer_001.secret \
+  backend node scripts/commercial-sts-admin.mjs issue-token customer_001 30
+```
+
 通过安全渠道把 `issued-customer_001.secret` 中的令牌交给用户，随后删除本地临时文件。
 
 ## 五、用户生命周期
@@ -83,6 +91,17 @@ docker compose exec backend node scripts/commercial-sts-admin.mjs disable-user c
 docker compose exec backend node scripts/commercial-sts-admin.mjs enable-user customer_001
 ```
 
+查看或移除用户设备：
+
+```bash
+docker compose exec backend node scripts/commercial-sts-admin.mjs list-devices customer_001
+read -s DEVICE_ID_TO_FORGET
+export DEVICE_ID_TO_FORGET
+docker compose exec -e DEVICE_ID_TO_FORGET backend \
+  node scripts/commercial-sts-admin.mjs forget-device customer_001
+unset DEVICE_ID_TO_FORGET
+```
+
 吊销单个令牌时，不要把令牌直接写进命令历史：
 
 ```bash
@@ -92,6 +111,26 @@ docker compose exec -e AUTH_TOKEN_TO_REVOKE backend \
   node scripts/commercial-sts-admin.mjs revoke-token
 unset AUTH_TOKEN_TO_REVOKE
 ```
+
+如果没有明文令牌，可以先列出用户令牌哈希，再按哈希吊销：
+
+```bash
+docker compose exec backend node scripts/commercial-sts-admin.mjs list-tokens customer_001
+read -s TOKEN_HASH_TO_REVOKE
+export TOKEN_HASH_TO_REVOKE
+docker compose exec -e TOKEN_HASH_TO_REVOKE backend \
+  node scripts/commercial-sts-admin.mjs revoke-token-hash
+unset TOKEN_HASH_TO_REVOKE
+```
+
+查看最近脱敏审计记录：
+
+```bash
+docker compose exec backend node scripts/commercial-sts-admin.mjs audit-log
+docker compose exec backend node scripts/commercial-sts-admin.mjs audit-log customer_001 50
+```
+
+审计查询结果只包含脱敏哈希、状态码和统计字段，不会输出明文授权令牌或设备 ID。
 
 ## 六、备份和恢复
 

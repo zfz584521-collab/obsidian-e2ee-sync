@@ -37,6 +37,23 @@ function defaultTokenOutputPath(storePath, userId, now) {
   return path.join(path.dirname(path.resolve(storePath)), `issued-token-${userId}-${timestamp}.secret`);
 }
 
+function parseAuditLimit(value) {
+  const limit = Number(value || 20);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
+    throw new Error('limit must be an integer between 1 and 200');
+  }
+  return limit;
+}
+
+function parseTokenExpiresAt(value, now) {
+  if (!value) return undefined;
+  const days = Number(value);
+  if (!Number.isInteger(days) || days < 1 || days > 366) {
+    throw new Error('expiresInDays must be an integer between 1 and 366');
+  }
+  return new Date(now + days * 24 * 60 * 60 * 1000).toISOString();
+}
+
 function writeTokenFile(filePath, token) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, `${token}\n`, {
@@ -71,12 +88,13 @@ export function runAdminCommand({
     const user = store.getUser(userId);
     if (!user || user.status !== 'active') throw new Error('Active user not found');
     const token = generateToken();
+    const expiresAt = parseTokenExpiresAt(rawValue, now);
     const outputPath = path.resolve(
       env.TOKEN_OUTPUT_FILE || defaultTokenOutputPath(env.STORE_PATH, userId, now),
     );
     writeTokenFile(outputPath, token);
-    store.addToken({ token, userId, status: 'active' });
-    return { success: true, action: 'issue-token', userId, tokenFile: outputPath };
+    store.addToken({ token, userId, status: 'active', expiresAt });
+    return { success: true, action: 'issue-token', userId, tokenFile: outputPath, expiresAt };
   }
 
   if (command === 'disable-user' || command === 'enable-user') {
@@ -94,6 +112,14 @@ export function runAdminCommand({
     return { success: true, action: 'revoke-token' };
   }
 
+  if (command === 'revoke-token-hash') {
+    if (!env.TOKEN_HASH_TO_REVOKE) throw new Error('TOKEN_HASH_TO_REVOKE is required');
+    if (!store.setTokenStatusByHash(env.TOKEN_HASH_TO_REVOKE, 'revoked')) {
+      throw new Error('Token not found');
+    }
+    return { success: true, action: 'revoke-token-hash', tokenHash: env.TOKEN_HASH_TO_REVOKE };
+  }
+
   if (command === 'user-status') {
     const userId = requireUserId(rawUserId);
     const user = store.getUser(userId);
@@ -106,6 +132,60 @@ export function runAdminCommand({
       plan: user.plan,
       maxDevices: user.maxDevices,
       deviceCount: store.countDevices(userId),
+    };
+  }
+
+  if (command === 'list-devices') {
+    const userId = requireUserId(rawUserId);
+    if (!store.getUser(userId)) throw new Error('User not found');
+    const devices = store.listDevices(userId);
+    return {
+      success: true,
+      action: 'list-devices',
+      userId,
+      count: devices.length,
+      devices,
+    };
+  }
+
+  if (command === 'list-tokens') {
+    const userId = requireUserId(rawUserId);
+    if (!store.getUser(userId)) throw new Error('User not found');
+    const tokens = store.listTokens(userId);
+    return {
+      success: true,
+      action: 'list-tokens',
+      userId,
+      count: tokens.length,
+      tokens,
+    };
+  }
+
+  if (command === 'forget-device') {
+    const userId = requireUserId(rawUserId);
+    if (!store.getUser(userId)) throw new Error('User not found');
+    if (!env.DEVICE_ID_TO_FORGET) throw new Error('DEVICE_ID_TO_FORGET is required');
+    const result = store.forgetDevice(userId, env.DEVICE_ID_TO_FORGET);
+    if (!result.removed) throw new Error('Device not found');
+    return {
+      success: true,
+      action: 'forget-device',
+      userId,
+      deviceIdHash: result.deviceIdHash,
+    };
+  }
+
+  if (command === 'audit-log') {
+    const userId = rawUserId ? requireUserId(rawUserId) : undefined;
+    const limit = parseAuditLimit(rawValue);
+    const logs = store.listAuditLogs({ userId, limit });
+    return {
+      success: true,
+      action: 'audit-log',
+      userId,
+      limit,
+      count: logs.length,
+      logs,
     };
   }
 

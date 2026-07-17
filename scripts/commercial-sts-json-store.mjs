@@ -75,9 +75,21 @@ export class JsonFileCommercialStore extends InMemoryCommercialStore {
     return changed;
   }
 
+  setTokenStatusByHash(tokenHash, status) {
+    const changed = super.setTokenStatusByHash(tokenHash, status);
+    if (changed) this.persist();
+    return changed;
+  }
+
   registerDevice(userId, deviceId, maxDevices) {
     const result = super.registerDevice(userId, deviceId, maxDevices);
     if (result.accepted) this.persist();
+    return result;
+  }
+
+  forgetDevice(userId, deviceId) {
+    const result = super.forgetDevice(userId, deviceId);
+    if (result.removed) this.persist();
     return result;
   }
 

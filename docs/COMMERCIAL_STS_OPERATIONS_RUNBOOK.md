@@ -26,6 +26,28 @@
 7. 告诉用户授权服务地址和授权令牌。
 ```
 
+签发令牌时可以设置有效天数，适合试用或固定期限用户：
+
+```powershell
+npm.cmd run admin:commercial-sts -- issue-token u_10001 30
+```
+
+不传有效天数时令牌长期有效，后续仍可通过 `revoke-token` 吊销。有效天数允许 1 到 366 天。
+
+查看用户令牌哈希和状态：
+
+```powershell
+npm.cmd run admin:commercial-sts -- list-tokens u_10001
+```
+
+如果已经没有明文令牌，但能从 `list-tokens` 或审计记录定位到 token hash，可以按哈希吊销：
+
+```powershell
+$env:TOKEN_HASH_TO_REVOKE="要吊销的 token hash"
+npm.cmd run admin:commercial-sts -- revoke-token-hash
+Remove-Item Env:\TOKEN_HASH_TO_REVOKE
+```
+
 用户在插件里填写：
 
 ```text
@@ -84,6 +106,20 @@ repoId
 超过上限返回 403。
 ```
 
+查看某个用户已登记设备：
+
+```powershell
+npm.cmd run admin:commercial-sts -- list-devices u_10001
+```
+
+移除某台设备时，不要把明文设备 ID 写进命令历史，使用环境变量传入：
+
+```powershell
+$env:DEVICE_ID_TO_FORGET="用户设备 ID"
+npm.cmd run admin:commercial-sts -- forget-device u_10001
+Remove-Item Env:\DEVICE_ID_TO_FORGET
+```
+
 返回：
 
 ```json
@@ -116,6 +152,20 @@ SecurityToken
 笔记文件内容
 明文文件路径
 ```
+
+查看最近脱敏审计记录：
+
+```powershell
+npm.cmd run admin:commercial-sts -- audit-log
+```
+
+查看指定用户最近 50 条审计记录：
+
+```powershell
+npm.cmd run admin:commercial-sts -- audit-log u_10001 50
+```
+
+审计查询结果只应包含 `deviceIdHash`、`authTokenHash`、状态码和结果，不应包含明文授权令牌、明文设备 ID、AccessKeySecret、SecurityToken 或同步密码。
 
 ## 六、最小后端模块
 

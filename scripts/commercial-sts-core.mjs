@@ -94,6 +94,25 @@ export class InMemoryCommercialStore {
     return true;
   }
 
+  setTokenStatusByHash(tokenHash, status) {
+    const entry = this.tokens.get(tokenHash);
+    if (!entry) return false;
+    entry.status = status;
+    return true;
+  }
+
+  listTokens(userId) {
+    return [...this.tokens.entries()]
+      .filter(([, token]) => token.userId === userId)
+      .map(([tokenHash, token]) => ({
+        tokenHash,
+        userId: token.userId,
+        status: token.status,
+        expiresAt: token.expiresAt,
+      }))
+      .sort((a, b) => a.tokenHash.localeCompare(b.tokenHash));
+  }
+
   registerDevice(userId, deviceId, maxDevices = DEFAULT_MAX_DEVICES) {
     const key = `${userId}:${hashSecret(deviceId, this.deviceSalt)}`;
     if (this.devices.has(key)) {
@@ -124,6 +143,20 @@ export class InMemoryCommercialStore {
     return count;
   }
 
+  listDevices(userId) {
+    return [...this.devices.values()]
+      .filter(device => device.userId === userId)
+      .map(device => ({ ...device }))
+      .sort((a, b) => (b.lastSeenAt || 0) - (a.lastSeenAt || 0));
+  }
+
+  forgetDevice(userId, deviceId) {
+    const deviceIdHash = hashSecret(deviceId, this.deviceSalt);
+    const key = `${userId}:${deviceIdHash}`;
+    const removed = this.devices.delete(key);
+    return { removed, deviceIdHash };
+  }
+
   writeAudit(event) {
     this.auditLogs.push(redactAuditEvent({
       ...event,
@@ -132,6 +165,13 @@ export class InMemoryCommercialStore {
       deviceSalt: this.deviceSalt,
       tokenSalt: this.tokenSalt,
     }));
+  }
+
+  listAuditLogs({ userId, limit = 20 } = {}) {
+    const filtered = userId
+      ? this.auditLogs.filter(event => event.userId === userId)
+      : this.auditLogs;
+    return filtered.slice(-limit).reverse().map(event => ({ ...event }));
   }
 }
 
