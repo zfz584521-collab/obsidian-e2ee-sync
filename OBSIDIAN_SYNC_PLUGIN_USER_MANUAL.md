@@ -330,6 +330,25 @@ test-a.md
 
 ## 六、常见问题
 
+### 从 0.1.0 升级到 0.1.1
+
+1. 退出 Obsidian。
+2. 备份当前插件目录，尤其不要删除 `.obsidian/plugins/obsidian-sync-plugin/data.json`。
+3. 用 0.1.1 安装包中的 `main.js`、`manifest.json`、`styles.css` 和本手册覆盖插件目录中的同名文件。
+4. 重新打开 Obsidian，在设置页确认使用模式：
+   - 个人模式：原有 AccessKey 配置会继续使用。
+   - 商业模式：确认授权服务地址、授权令牌和同步密码仍然存在。
+5. 点击“测试连接”，通过后再同步。
+
+### 如何回滚
+
+1. 退出 Obsidian。
+2. 用上一版安装包覆盖 `main.js`、`manifest.json` 和 `styles.css`。
+3. 保留 `data.json`，不要删除本地笔记。
+4. 重新打开 Obsidian 后测试连接。
+
+如果回滚到不支持商业模式的旧版本，需要重新使用个人 AccessKey 模式，或恢复升级前备份的插件配置。
+
 ### 第二台没有下载文件
 
 检查：

@@ -1,5 +1,51 @@
 # 发布说明
 
+## v0.1.1 (2026-07-17)
+
+### 商业 STS MVP
+
+本版本在保留个人 static AccessKey 模式的基础上，新增商业授权服务模式。商业模式下，用户不需要填写长期 AccessKey，只需要填写授权服务地址、授权令牌和同步密码，插件会自动获取短期 OSS 临时凭证并完成端到端加密同步。
+
+### 主要变化
+
+- 新增 `static` / `sts` 双凭证模式。
+- 新增 STS 临时凭证获取、缓存和临近过期刷新。
+- 新增 SecurityToken 注入 S3/OSS 客户端。
+- 新增商业授权服务 mock、最小后端骨架、运营 CLI、Docker Compose + Caddy 部署示例。
+- 新增阿里云 STS/OSS 脱敏预检和冒烟测试脚本。
+- 修复商业 STS 最小权限下测试连接误用 HeadBucket 导致的连接失败。
+- 改进授权失败、限流、超时和网络异常的中文用户提示。
+
+### 安装
+
+安装包包含：
+
+- `main.js`
+- `manifest.json`
+- `styles.css`
+- `OBSIDIAN_SYNC_PLUGIN_USER_MANUAL.md`
+
+将以上文件放入 `.obsidian/plugins/obsidian-sync-plugin/` 后启用插件。
+
+### 升级说明
+
+从 `0.1.0` 或 `0.1.0-commercial-sts-fix` 升级到 `0.1.1` 时，覆盖插件目录中的 `main.js`、`manifest.json`、`styles.css` 和用户手册即可。不要删除或覆盖 Obsidian 插件目录中的 `data.json`。
+
+个人 static AccessKey 模式配置会保留。商业 STS 模式配置同样会保留，但临时凭证只在运行时使用，不需要手工迁移。
+
+### 回滚说明
+
+如需回滚，先退出 Obsidian，再用上一版安装包覆盖 `main.js`、`manifest.json` 和 `styles.css`。保留 `data.json` 可继续使用原有配置。
+
+如果已经切换到商业 STS 模式并回滚到不支持 STS 的版本，需要在旧版界面中重新填写个人 static AccessKey 配置，或恢复回滚前备份的配置。
+
+### 验证结果
+
+- `npm.cmd test`：23 个测试文件、151 条测试通过。
+- `npm.cmd run build`：通过。
+- `git diff --check`：通过，仅有 Windows 换行提示。
+- 真实环境已完成 HTTPS、CORS、401、STS 签发、OSS 前缀 CRUD、跨租户拒绝和双库双向同步闭环验证。
+
 ## v0.1.0 (2026-06-10)
 
 ### 首次发布

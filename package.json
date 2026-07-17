@@ -1,6 +1,6 @@
 {
   "name": "obsidian-sync-plugin",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Cross-device sync plugin for Obsidian with end-to-end encryption",
   "main": "main.js",
   "scripts": {

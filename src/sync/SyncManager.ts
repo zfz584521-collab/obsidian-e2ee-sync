@@ -57,7 +57,7 @@ export class SyncManager {
   private statsCollector: SyncStatsCollector;
   private abortController: AbortController | null = null;
   private static readonly LOCAL_INDEX_KEY = 'local-index';
-  private static readonly PLUGIN_VERSION = '0.1.0';
+  private static readonly PLUGIN_VERSION = '0.1.1';
 
   constructor(
     app: App,
