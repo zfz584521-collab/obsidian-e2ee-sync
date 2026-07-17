@@ -11,30 +11,39 @@ export class ConfigValidator {
     const errors: string[] = [];
     const warnings: string[] = [];
     const { s3 } = settings;
+    const mode = settings.credentialMode || 'static';
 
-    if (!s3.endpoint.trim()) {
-      errors.push('缺少服务地址 Endpoint。');
-    } else {
-      try {
-        const url = new URL(s3.endpoint);
-        if (!['http:', 'https:'].includes(url.protocol)) {
-          errors.push('服务地址必须以 http:// 或 https:// 开头。');
+    if (mode === 'sts') {
+      if (!settings.sts.authServerUrl.trim()) {
+        errors.push('缺少授权服务地址。');
+      } else {
+        this.validateUrl(settings.sts.authServerUrl, '授权服务地址', errors);
+        if (!this.isLocalHttpUrl(settings.sts.authServerUrl) && settings.sts.authServerUrl.startsWith('http://')) {
+          warnings.push('商业模式建议使用 HTTPS 授权服务地址，避免授权令牌被窃听。');
         }
-      } catch {
-        errors.push('服务地址不是合法 URL。');
       }
-    }
 
-    if (!s3.bucket.trim()) {
-      errors.push('缺少存储桶 Bucket。');
-    }
+      if (!settings.sts.authToken.trim()) {
+        errors.push('缺少授权令牌。');
+      }
+    } else {
+      if (!s3.endpoint.trim()) {
+        errors.push('缺少服务地址 Endpoint。');
+      } else {
+        this.validateUrl(s3.endpoint, '服务地址', errors);
+      }
 
-    if (!s3.accessKey.trim()) {
-      errors.push('缺少 AccessKey。');
-    }
+      if (!s3.bucket.trim()) {
+        errors.push('缺少存储桶 Bucket。');
+      }
 
-    if (!s3.secretKey.trim()) {
-      errors.push('缺少 SecretKey。');
+      if (!s3.accessKey.trim()) {
+        errors.push('缺少 AccessKey。');
+      }
+
+      if (!s3.secretKey.trim()) {
+        errors.push('缺少 SecretKey。');
+      }
     }
 
     if (!settings.syncPassword) {
@@ -67,6 +76,26 @@ export class ConfigValidator {
       errors,
       warnings,
     };
+  }
+
+  private static validateUrl(value: string, label: string, errors: string[]): void {
+    try {
+      const url = new URL(value);
+      if (!['http:', 'https:'].includes(url.protocol)) {
+        errors.push(`${label}必须以 http:// 或 https:// 开头。`);
+      }
+    } catch {
+      errors.push(`${label}不是合法 URL。`);
+    }
+  }
+
+  private static isLocalHttpUrl(value: string): boolean {
+    try {
+      const url = new URL(value);
+      return url.protocol === 'http:' && ['localhost', '127.0.0.1', '::1'].includes(url.hostname);
+    } catch {
+      return false;
+    }
   }
 
   static format(result: ConfigValidationResult): string {

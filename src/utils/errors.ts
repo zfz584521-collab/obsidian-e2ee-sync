@@ -69,6 +69,13 @@ export class SyncError extends Error {
    * 获取用户友好的错误消息
    */
   getUserMessage(): string {
+    if (
+      this.message &&
+      /^(获取临时同步凭证失败|缺少授权|授权服务返回)/.test(this.message)
+    ) {
+      return this.message;
+    }
+
     const messages: Record<SyncErrorCode, string> = {
       [SyncErrorCode.CONFIG_MISSING]: '同步未配置，请检查设置',
       [SyncErrorCode.CONFIG_INVALID]: '配置无效，请检查 S3 设置和同步密码',

@@ -17,17 +17,39 @@ export class SyncSettingsTab extends PluginSettingTab {
 
     containerEl.createEl('h2', { text: '同步设置' });
     containerEl.createEl('p', {
-      text: '普通使用只需要填写下面 5 项。第二台设备可以直接粘贴第一台复制出来的配置。',
+      text: '个人模式填写对象存储密钥；商业模式只填写授权服务、授权令牌和同步密码。',
     });
 
+    this.renderCredentialMode(containerEl);
     this.renderBasicSettings(containerEl);
     this.renderMainActions(containerEl);
     this.renderSecondDeviceActions(containerEl);
     this.renderAdvancedSettings(containerEl);
   }
 
+  private renderCredentialMode(containerEl: HTMLElement): void {
+    new Setting(containerEl)
+      .setName('使用模式')
+      .setDesc('个人模式保留手动 AccessKey；商业模式从授权服务自动获取临时凭证。')
+      .addDropdown(dropdown => dropdown
+        .addOption('static', '个人模式：手动 AccessKey')
+        .addOption('sts', '商业模式：授权服务')
+        .setValue(this.plugin.settings.credentialMode || 'static')
+        .onChange(async (value) => {
+          this.plugin.settings.credentialMode = value === 'sts' ? 'sts' : 'static';
+          await this.plugin.saveSettings();
+          this.plugin.syncManager.updateSettings(this.plugin.settings);
+          this.display();
+        }));
+  }
+
   private renderBasicSettings(containerEl: HTMLElement): void {
     containerEl.createEl('h3', { text: '一、必填信息' });
+
+    if ((this.plugin.settings.credentialMode || 'static') === 'sts') {
+      this.renderCommercialSettings(containerEl);
+      return;
+    }
 
     new Setting(containerEl)
       .setName('服务地址')
@@ -83,10 +105,55 @@ export class SyncSettingsTab extends PluginSettingTab {
         text.inputEl.type = 'password';
         text
           .setPlaceholder('请设置同步密码')
+        .setValue(this.plugin.settings.syncPassword)
+        .onChange(async (value) => {
+          this.plugin.settings.syncPassword = value;
+          await this.plugin.saveSettings();
+          this.plugin.syncManager.updateSettings(this.plugin.settings);
+        });
+      });
+  }
+
+  private renderCommercialSettings(containerEl: HTMLElement): void {
+    new Setting(containerEl)
+      .setName('授权服务地址')
+      .setDesc('由服务提供方给你的同步授权服务地址。')
+      .addText(text => text
+        .setPlaceholder('例如：https://sync.example.com')
+        .setValue(this.plugin.settings.sts.authServerUrl)
+        .onChange(async (value) => {
+          this.plugin.settings.sts.authServerUrl = value.trim();
+          await this.plugin.saveSettings();
+          this.plugin.syncManager.updateSettings(this.plugin.settings);
+        }));
+
+    new Setting(containerEl)
+      .setName('授权令牌')
+      .setDesc('由服务提供方发放。插件会用它换取短期同步凭证。')
+      .addText(text => {
+        text.inputEl.type = 'password';
+        text
+          .setPlaceholder('授权令牌')
+          .setValue(this.plugin.settings.sts.authToken)
+          .onChange(async (value) => {
+            this.plugin.settings.sts.authToken = value.trim();
+            await this.plugin.saveSettings();
+            this.plugin.syncManager.updateSettings(this.plugin.settings);
+          });
+      });
+
+    new Setting(containerEl)
+      .setName('同步密码')
+      .setDesc('自己设置一个密码。所有设备必须填同一个同步密码；服务端不会知道这个密码。')
+      .addText(text => {
+        text.inputEl.type = 'password';
+        text
+          .setPlaceholder('请设置同步密码')
           .setValue(this.plugin.settings.syncPassword)
           .onChange(async (value) => {
             this.plugin.settings.syncPassword = value;
             await this.plugin.saveSettings();
+            this.plugin.syncManager.updateSettings(this.plugin.settings);
           });
       });
   }
@@ -112,7 +179,9 @@ export class SyncSettingsTab extends PluginSettingTab {
         .onClick(async () => {
           try {
             if (!this.plugin.syncManager.isConfigured()) {
-              new Notice('请先填完服务地址、存储桶、访问密钥和同步密码。');
+              new Notice(this.plugin.settings.credentialMode === 'sts'
+                ? '请先填完授权服务地址、授权令牌和同步密码。'
+                : '请先填完服务地址、存储桶、访问密钥和同步密码。');
               return;
             }
             new Notice('正在测试连接...');
@@ -165,17 +234,28 @@ export class SyncSettingsTab extends PluginSettingTab {
             region: imported.s3?.region || this.plugin.settings.s3.region || 'auto',
             storagePrefix: imported.s3?.storagePrefix || '',
           };
+          this.plugin.settings.credentialMode = imported.credentialMode || this.plugin.settings.credentialMode || 'static';
+          this.plugin.settings.sts = {
+            ...this.plugin.settings.sts,
+            authServerUrl: imported.sts?.authServerUrl || this.plugin.settings.sts.authServerUrl,
+            authToken: this.plugin.settings.sts.authToken,
+            vaultId: imported.sts?.vaultId || this.plugin.settings.sts.vaultId || 'main',
+            refreshSkewMs: imported.sts?.refreshSkewMs || this.plugin.settings.sts.refreshSkewMs,
+          };
           this.plugin.settings.repoId = imported.repoId || this.plugin.settings.repoId;
 
           await this.plugin.saveSettings();
           this.plugin.syncManager.updateSettings(this.plugin.settings);
-          new Notice('已粘贴第一台配置。请继续填写访问密钥、访问密钥密码和同步密码。');
+          new Notice(this.plugin.settings.credentialMode === 'sts'
+            ? '已粘贴第一台配置。请继续填写授权令牌和同步密码。'
+            : '已粘贴第一台配置。请继续填写访问密钥、访问密钥密码和同步密码。');
           this.display();
         }));
   }
 
   private renderAdvancedSettings(containerEl: HTMLElement): void {
     containerEl.createEl('h3', { text: '高级设置（一般不用改）' });
+    const mode = this.plugin.settings.credentialMode || 'static';
 
     new Setting(containerEl)
       .setName('设备名称')
@@ -188,44 +268,46 @@ export class SyncSettingsTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
 
-    new Setting(containerEl)
-      .setName('区域')
-      .setDesc('默认 auto。只有服务商要求时才需要修改。')
-      .addText(text => text
-        .setPlaceholder('auto')
-        .setValue(this.plugin.settings.s3.region || 'auto')
-        .onChange(async (value) => {
-          this.plugin.settings.s3.region = value.trim() || 'auto';
-          await this.plugin.saveSettings();
-        }));
+    if (mode === 'static') {
+      new Setting(containerEl)
+        .setName('区域')
+        .setDesc('默认 auto。只有服务商要求时才需要修改。')
+        .addText(text => text
+          .setPlaceholder('auto')
+          .setValue(this.plugin.settings.s3.region || 'auto')
+          .onChange(async (value) => {
+            this.plugin.settings.s3.region = value.trim() || 'auto';
+            await this.plugin.saveSettings();
+          }));
 
-    new Setting(containerEl)
-      .setName('同步通道前缀')
-      .setDesc('可选。一般不用填；需要在同一个桶里区分测试环境时再填。')
-      .addText(text => text
-        .setPlaceholder('可留空')
-        .setValue(this.plugin.settings.s3.storagePrefix || '')
-        .onChange(async (value) => {
-          this.plugin.settings.s3.storagePrefix = value.trim();
-          await this.plugin.saveSettings();
-        }));
+      new Setting(containerEl)
+        .setName('同步通道前缀')
+        .setDesc('可选。一般不用填；需要在同一个桶里区分测试环境时再填。')
+        .addText(text => text
+          .setPlaceholder('可留空')
+          .setValue(this.plugin.settings.s3.storagePrefix || '')
+          .onChange(async (value) => {
+            this.plugin.settings.s3.storagePrefix = value.trim();
+            await this.plugin.saveSettings();
+          }));
 
-    new Setting(containerEl)
-      .setName('仓库 ID')
-      .setDesc(this.plugin.settings.repoId || '尚未创建。首次同步或复制第二台配置时会自动创建。')
-      .addButton(button => button
-        .setButtonText('重新创建仓库')
-        .setWarning()
-        .onClick(async () => {
-          const ok = window.confirm('重新创建仓库 ID 后，会使用一个新的远端同步空间。旧远端数据不会删除。是否继续？');
-          if (!ok) return;
+      new Setting(containerEl)
+        .setName('仓库 ID')
+        .setDesc(this.plugin.settings.repoId || '尚未创建。首次同步或复制第二台配置时会自动创建。')
+        .addButton(button => button
+          .setButtonText('重新创建仓库')
+          .setWarning()
+          .onClick(async () => {
+            const ok = window.confirm('重新创建仓库 ID 后，会使用一个新的远端同步空间。旧远端数据不会删除。是否继续？');
+            if (!ok) return;
 
-          this.plugin.settings.repoId = this.plugin.crypto.generateRepoId();
-          await this.plugin.saveSettings();
-          this.plugin.syncManager.updateSettings(this.plugin.settings);
-          new Notice('已创建新的仓库 ID。');
-          this.display();
-        }));
+            this.plugin.settings.repoId = this.plugin.crypto.generateRepoId();
+            await this.plugin.saveSettings();
+            this.plugin.syncManager.updateSettings(this.plugin.settings);
+            new Notice('已创建新的仓库 ID。');
+            this.display();
+          }));
+    }
 
     new Setting(containerEl)
       .setName('自动同步')
@@ -252,6 +334,35 @@ export class SyncSettingsTab extends PluginSettingTab {
             this.plugin.syncManager.updateSettings(this.plugin.settings);
           }
         }));
+
+    if (mode === 'sts') {
+      new Setting(containerEl)
+        .setName('商业 Vault ID')
+        .setDesc('商业模式使用。普通用户保持 main 即可。')
+        .addText(text => text
+          .setPlaceholder('main')
+          .setValue(this.plugin.settings.sts.vaultId || 'main')
+          .onChange(async (value) => {
+          this.plugin.settings.sts.vaultId = value.trim() || 'main';
+          await this.plugin.saveSettings();
+          this.plugin.syncManager.updateSettings(this.plugin.settings);
+        }));
+
+      new Setting(containerEl)
+        .setName('临时凭证提前刷新')
+        .setDesc('商业模式使用。单位秒，默认 300 秒。')
+        .addText(text => text
+          .setPlaceholder('300')
+          .setValue(String(Math.round((this.plugin.settings.sts.refreshSkewMs || 300000) / 1000)))
+          .onChange(async (value) => {
+            const seconds = parseInt(value, 10);
+            if (!isNaN(seconds) && seconds >= 0) {
+              this.plugin.settings.sts.refreshSkewMs = seconds * 1000;
+              await this.plugin.saveSettings();
+              this.plugin.syncManager.updateSettings(this.plugin.settings);
+            }
+          }));
+    }
 
     new Setting(containerEl)
       .setName('检查远端布局')

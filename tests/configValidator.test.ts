@@ -4,6 +4,7 @@ import { ConfigValidator } from '../src/utils/ConfigValidator';
 
 const completeSettings = (overrides: Partial<SyncSettings> = {}): SyncSettings => {
   const base: SyncSettings = {
+    credentialMode: 'static',
     s3: {
       endpoint: 'https://oss.example.test',
       bucket: 'notes-bucket',
@@ -11,6 +12,12 @@ const completeSettings = (overrides: Partial<SyncSettings> = {}): SyncSettings =
       secretKey: 'secret-key',
       region: 'auto',
       storagePrefix: 'personal-channel',
+    },
+    sts: {
+      authServerUrl: '',
+      authToken: '',
+      vaultId: 'main',
+      refreshSkewMs: 300000,
     },
     syncPassword: 'long-shared-password',
     deviceId: 'dev_current_device',
@@ -81,6 +88,77 @@ describe('ConfigValidator', () => {
     expect(result.warnings).toContain('同步通道前缀建议使用 /，不要使用反斜杠。');
     expect(result.warnings).toContain('同步通道前缀不建议以 / 开头或结尾。');
     expect(result.warnings).toContain('同步通道前缀不应包含空路径段。');
+  });
+
+  it('validates commercial STS mode without static AccessKey fields', () => {
+    const result = ConfigValidator.validate(completeSettings({
+      credentialMode: 'sts',
+      s3: {
+        endpoint: '',
+        bucket: '',
+        accessKey: '',
+        secretKey: '',
+        region: 'auto',
+        storagePrefix: '',
+      },
+      sts: {
+        authServerUrl: 'https://sync.example.test',
+        authToken: 'commercial-token',
+        vaultId: 'main',
+        refreshSkewMs: 300000,
+      },
+    }));
+
+    expect(result.valid).toBe(true);
+    expect(result.errors).not.toContain('缺少 AccessKey。');
+    expect(result.errors).not.toContain('缺少 SecretKey。');
+    expect(result.errors).not.toContain('缺少存储桶 Bucket。');
+  });
+
+  it('reports missing commercial authorization fields', () => {
+    const result = ConfigValidator.validate(completeSettings({
+      credentialMode: 'sts',
+      sts: {
+        authServerUrl: '',
+        authToken: '',
+        vaultId: 'main',
+        refreshSkewMs: 300000,
+      },
+    }));
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('缺少授权服务地址。');
+    expect(result.errors).toContain('缺少授权令牌。');
+  });
+
+  it('warns when commercial authorization service is not HTTPS outside localhost', () => {
+    const result = ConfigValidator.validate(completeSettings({
+      credentialMode: 'sts',
+      sts: {
+        authServerUrl: 'http://sync.example.test',
+        authToken: 'commercial-token',
+        vaultId: 'main',
+        refreshSkewMs: 300000,
+      },
+    }));
+
+    expect(result.valid).toBe(true);
+    expect(result.warnings).toContain('商业模式建议使用 HTTPS 授权服务地址，避免授权令牌被窃听。');
+  });
+
+  it('allows localhost HTTP for mock STS development', () => {
+    const result = ConfigValidator.validate(completeSettings({
+      credentialMode: 'sts',
+      sts: {
+        authServerUrl: 'http://127.0.0.1:8787',
+        authToken: 'commercial-token',
+        vaultId: 'main',
+        refreshSkewMs: 300000,
+      },
+    }));
+
+    expect(result.valid).toBe(true);
+    expect(result.warnings).not.toContain('商业模式建议使用 HTTPS 授权服务地址，避免授权令牌被窃听。');
   });
 
   it('formats validation results for a short settings-page notice', () => {

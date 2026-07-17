@@ -51,6 +51,12 @@ describe('SyncError', () => {
         expect(error.getUserMessage()).toBeTruthy();
       }
     });
+
+    it('应该保留 STS 授权错误的具体中文说明', () => {
+      const error = new SyncError(SyncErrorCode.NETWORK_ERROR, '获取临时同步凭证失败：授权令牌无效');
+
+      expect(error.getUserMessage()).toBe('获取临时同步凭证失败：授权令牌无效');
+    });
   });
 
   describe('fromError', () => {

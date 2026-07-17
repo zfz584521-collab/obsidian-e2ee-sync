@@ -8,9 +8,44 @@ export interface S3Config {
   bucket: string;
   accessKey: string;
   secretKey: string;
+  /** STS temporary session token. Kept in memory for commercial mode. */
+  securityToken?: string;
   region: string;
   /** Optional remote object prefix, used to isolate channels inside the same bucket. */
   storagePrefix?: string;
+}
+
+/** Credential source mode. */
+export type CredentialMode = 'static' | 'sts';
+
+/** STS authorization service settings. */
+export interface StsConfig {
+  /** Backend authorization service base URL or full credentials endpoint URL. */
+  authServerUrl: string;
+  /** User authorization token issued by the backend. */
+  authToken: string;
+  /** Vault identifier sent to the backend. Defaults to repoId/main when empty. */
+  vaultId: string;
+  /** Refresh credentials before expiration by this many milliseconds. */
+  refreshSkewMs: number;
+}
+
+/** Temporary credentials returned by the backend. */
+export interface TemporaryCredentials {
+  accessKeyId: string;
+  accessKeySecret: string;
+  securityToken: string;
+  expiration: string;
+}
+
+/** Backend response for commercial STS mode. */
+export interface StsCredentialResponse {
+  endpoint: string;
+  bucket: string;
+  region?: string;
+  storagePrefix: string;
+  repoId?: string;
+  credentials: TemporaryCredentials;
 }
 
 /** 同步规则 */
@@ -25,8 +60,12 @@ export interface SyncRule {
 
 /** 插件设置，存储在 data.json */
 export interface SyncSettings {
+  /** Credential mode: personal static keys or commercial STS credentials. */
+  credentialMode: CredentialMode;
   /** S3 兼容存储配置 */
   s3: S3Config;
+  /** Commercial STS authorization settings. */
+  sts: StsConfig;
   /** 用户定义的同步密码，用于加密 */
   syncPassword: string;
   /** 唯一设备标识 */
@@ -45,13 +84,21 @@ export interface SyncSettings {
 
 /** 默认设置 */
 export const DEFAULT_SETTINGS: SyncSettings = {
+  credentialMode: 'static',
   s3: {
     endpoint: '',
     bucket: '',
     accessKey: '',
     secretKey: '',
+    securityToken: '',
     region: 'auto',
     storagePrefix: '',
+  },
+  sts: {
+    authServerUrl: '',
+    authToken: '',
+    vaultId: 'main',
+    refreshSkewMs: 5 * 60 * 1000,
   },
   syncPassword: '',
   deviceId: '',

@@ -1,0 +1,45 @@
+services:
+  backend:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.commercial-sts
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 8788
+      STORE_PATH: /app/data/store.json
+      PUBLIC_BASE_URL: https://${SYNC_DOMAIN}
+    volumes:
+      - commercial_sts_data:/app/data
+    networks:
+      - internal
+
+  caddy:
+    image: caddy:2.11.4-alpine
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      SYNC_DOMAIN: ${SYNC_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - internal
+
+networks:
+  internal:
+
+volumes:
+  commercial_sts_data:
+  caddy_data:
+  caddy_config:

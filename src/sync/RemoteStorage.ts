@@ -81,6 +81,7 @@ export class RemoteStorage {
       credentials: {
         accessKeyId: config.accessKey,
         secretAccessKey: config.secretKey,
+        sessionToken: config.securityToken || undefined,
       },
       forcePathStyle: shouldForcePathStyle(config.endpoint),
       requestHandler: new ObsidianHttpHandler(),
@@ -110,7 +111,13 @@ export class RemoteStorage {
     try {
       return await withRetry(
         async () => {
-          const command = new HeadBucketCommand({ Bucket: this.config!.bucket });
+          const command = this.storagePrefix && this.repoId
+            ? new ListObjectsV2Command({
+                Bucket: this.config!.bucket,
+                Prefix: this.namespacePrefix(),
+                MaxKeys: 1,
+              })
+            : new HeadBucketCommand({ Bucket: this.config!.bucket });
           await this.client!.send(command);
           console.log('[远端存储] 连接测试通过');
           this.connected = true;

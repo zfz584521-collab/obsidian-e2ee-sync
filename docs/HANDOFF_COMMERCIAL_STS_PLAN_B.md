@@ -1,5 +1,8 @@
 # 新窗口交接：商业化方案 B（后端 STS 临时凭证）
 
+> 本文保留早期设计背景。2026-07-17 真实环境联调后的最新状态请优先阅读
+> `docs/HANDOFF_COMMERCIAL_STS_PRODUCTION_VALIDATED_20260717.md`。
+
 这个文档用于新开一个 Codex 窗口时交接上下文。目标是继续开发 Obsidian 同步插件的商业化方案 B：
 
 ```text
@@ -66,6 +69,8 @@ docs/COMMERCIAL_MULTI_USER_OSS_ACCESS_PLAN.md
 请先阅读：
 
 ```text
+docs/COMMERCIAL_STS_BACKEND_CONTRACT.md
+docs/COMMERCIAL_STS_OPERATIONS_RUNBOOK.md
 docs/COMMERCIAL_MULTI_USER_OSS_ACCESS_PLAN.md
 docs/MULTI_USER_REPOSITORY_ISOLATION.md
 docs/HANDOFF_MULTI_DEVICE_SYNC.md
@@ -341,7 +346,7 @@ Content-Type: application/json
 
 ```json
 {
-  "endpoint": "https://oss-cn-hangzhou.aliyuncs.com",
+  "endpoint": "https://s3.oss-cn-hangzhou.aliyuncs.com",
   "bucket": "obsidian-sync-commercial",
   "region": "cn-hangzhou",
   "storagePrefix": "tenants/u_10001/vaults/main",
@@ -532,6 +537,127 @@ RemoteStorage 可以接收 securityToken
 单元测试覆盖凭证获取和刷新
 npm.cmd test 通过
 npm.cmd run build 通过
+```
+
+## 十六、2026-07-11 STS 插件端第一阶段更新
+
+本轮已经完成插件端商业模式预留：
+
+```text
+新增 credentialMode: "static" | "sts"
+新增 sts 授权服务配置
+新增 StsCredentialProvider
+RemoteStorage 支持 securityToken/sessionToken
+SyncManager 在测试连接和同步前获取/刷新 STS 临时凭证
+设置页支持个人模式 / 商业模式切换
+商业模式只展示授权服务地址、授权令牌、同步密码
+配置导出不包含 AccessKey、Secret、SecurityToken、authToken、同步密码、deviceId
+新增本地 mock STS 服务
+新增后端接口契约文档
+```
+
+新增文件：
+
+```text
+src/sync/StsCredentialProvider.ts
+tests/stsCredentialProvider.test.ts
+tests/mockStsServer.test.ts
+scripts/mock-sts-server.mjs
+scripts/commercial-sts-core.mjs
+scripts/commercial-sts-server.mjs
+scripts/aliyun-oss-sts-policy.mjs
+scripts/aliyun-sts-provider.mjs
+scripts/commercial-sts-preflight.mjs
+docs/COMMERCIAL_STS_BACKEND_CONTRACT.md
+docs/COMMERCIAL_STS_OPERATIONS_RUNBOOK.md
+```
+
+本地 mock 后端：
+
+```powershell
+npm.cmd run mock:sts
+```
+
+默认：
+
+```text
+授权服务地址：http://127.0.0.1:8787
+授权令牌：dev-commercial-token
+```
+
+注意：
+
+```text
+mock 只返回假凭证结构，不连接阿里云，不能完成真实 OSS 同步。
+真实 STS 后端接入时再读取云端配置和做阿里云 AssumeRole 验证。
+```
+
+最新验证：
+
+```text
+npm.cmd test：18 个测试文件，126 条测试通过
+npm.cmd run build：构建成功
+git diff --check：无空白错误，仅 Windows 换行提示
+```
+
+真实阿里云联调前可以运行安全预检：
+
+```powershell
+npm.cmd run preflight:commercial-sts
+```
+
+该命令只报告缺失的环境变量名称和 HTTPS/时长状态，不输出任何环境变量值。最新验证为 19 个测试文件、129 条测试通过。
+
+2026-07-13 真实联调前安全审查新增：
+
+```text
+Aliyun 模式拒绝开发默认 token/device 盐和空种子授权令牌
+授权接口请求体上限为 16 KiB，超限返回 413
+审计哈希使用部署专属盐
+客户端 repoId 在进入 STS Policy 前清洗通配符和路径字符
+插件成功日志不再记录 endpoint、bucket、storagePrefix
+未知后端错误文本不再透传给用户
+最新验证为 19 个测试文件、133 条测试通过
+```
+
+真实云端联调工具已补齐：
+
+```text
+新增 scripts/aliyun-sts-smoke.mjs
+新增 npm.cmd run smoke:aliyun-sts
+冒烟测试只调用 AssumeRole，不读写 OSS 对象
+输出只包含成功状态、凭证字段完整性和过期时间
+阿里云账号信息文件脱敏预检确认当前仅缺 ALIYUN_STS_ROLE_ARN
+最新验证为 20 个测试文件、134 条测试通过
+```
+
+2026-07-14 真实阿里云 OSS STS 闭环验证完成：
+
+```text
+商业专用私有 Bucket 已创建，个人 static 模式的原 Bucket 未改动
+RAM Role 基础策略已切换到商业专用 Bucket
+AssumeRole 成功，临时凭证字段完整
+授权租户前缀 List/Put/Get/Delete 全部成功
+跨租户前缀 List 被 403 拒绝
+烟雾测试对象已删除，无残留对象
+AWS SDK for JavaScript v3 使用 https://s3.oss-cn-hangzhou.aliyuncs.com
+阿里云 OSS 使用虚拟主机寻址，不能为普通公网端点强制 path-style
+新增 npm.cmd run smoke:aliyun-oss-sts，可重复执行脱敏 CRUD 与隔离验证
+最新验证为 21 个测试文件、135 条测试通过，生产构建通过
+```
+
+2026-07-14 最小生产部署骨架新增：
+
+```text
+新增原子 JSON 持久化存储，保存用户、令牌哈希、设备哈希和脱敏审计
+新增运营 CLI：创建/停用/启用用户、签发/吊销令牌、查看用户状态
+签发令牌只写入 .secret 文件，不在终端输出
+新增 /healthz、no-store 响应头、请求超时和按令牌限流
+生产模式强制 HTTPS PUBLIC_BASE_URL 和持久化 STORE_PATH
+新增 Dockerfile、Docker Compose 与 Caddy 自动 HTTPS 部署骨架
+部署镜像使用 Node 24 LTS 和 Caddy 2.11.4 Alpine
+本机未安装 Docker，镜像构建需要在部署服务器或安装 Docker 后验证
+最新验证为 23 个测试文件、144 条测试通过，生产构建通过，生产依赖 0 个已知漏洞
 ```
 
 第二阶段完成，当：

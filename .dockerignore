@@ -1,0 +1,13 @@
+.git
+.github
+.commercial-sts
+node_modules
+release
+tests
+docs
+*.log
+*.secret
+data.json
+.data.json
+阿里云账号信息.txt
+main.js

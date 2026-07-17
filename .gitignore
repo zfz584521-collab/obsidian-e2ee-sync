@@ -18,6 +18,12 @@ Thumbs.db
 # Obsidian
 data.json
 .data.json
+阿里云账号信息.txt
 
 # Dev files
 *.log
+.commercial-sts/
+*.secret
+.env
+.env.*
+!.env.example

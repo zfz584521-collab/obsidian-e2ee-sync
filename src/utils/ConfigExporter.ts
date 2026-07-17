@@ -8,6 +8,7 @@ export class ConfigExporter {
       version: '1.0.0',
       exportedAt: Date.now(),
       settings: {
+        credentialMode: settings.credentialMode || 'static',
         s3: {
           endpoint: settings.s3.endpoint,
           bucket: settings.s3.bucket,
@@ -15,6 +16,13 @@ export class ConfigExporter {
           storagePrefix: settings.s3.storagePrefix || '',
           accessKey: '',
           secretKey: '',
+          securityToken: '',
+        },
+        sts: {
+          authServerUrl: settings.sts.authServerUrl,
+          authToken: '',
+          vaultId: settings.sts.vaultId || 'main',
+          refreshSkewMs: settings.sts.refreshSkewMs,
         },
         syncPassword: '',
         deviceId: '',
@@ -93,10 +101,13 @@ export class ConfigExporter {
 
   static generateShareUrl(settings: SyncSettings): string {
     const data = {
+      credentialMode: settings.credentialMode || 'static',
       endpoint: settings.s3.endpoint,
       bucket: settings.s3.bucket,
       region: settings.s3.region || 'auto',
       storagePrefix: settings.s3.storagePrefix || '',
+      authServerUrl: settings.sts.authServerUrl,
+      vaultId: settings.sts.vaultId || 'main',
       repoId: settings.repoId,
     };
 
@@ -115,6 +126,7 @@ export class ConfigExporter {
       const data = JSON.parse(json);
 
       return {
+        credentialMode: data.credentialMode || 'static',
         s3: {
           ...DEFAULT_SETTINGS.s3,
           endpoint: data.endpoint || '',
@@ -123,6 +135,13 @@ export class ConfigExporter {
           storagePrefix: data.storagePrefix || '',
           accessKey: '',
           secretKey: '',
+          securityToken: '',
+        },
+        sts: {
+          ...DEFAULT_SETTINGS.sts,
+          authServerUrl: data.authServerUrl || '',
+          authToken: '',
+          vaultId: data.vaultId || 'main',
         },
         repoId: data.repoId || '',
       };

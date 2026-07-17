@@ -130,9 +130,14 @@ export default class SyncPlugin extends Plugin {
     this.settings = {
       ...DEFAULT_SETTINGS,
       ...data,
+      credentialMode: data?.credentialMode === 'sts' ? 'sts' : 'static',
       s3: {
         ...DEFAULT_SETTINGS.s3,
         ...(data?.s3 || {}),
+      },
+      sts: {
+        ...DEFAULT_SETTINGS.sts,
+        ...(data?.sts || {}),
       },
     };
 

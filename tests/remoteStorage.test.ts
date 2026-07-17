@@ -36,6 +36,48 @@ describe('RemoteStorage', () => {
     });
   });
 
+  describe('testConnection', () => {
+    const config = {
+      endpoint: 'https://oss-cn-hangzhou.aliyuncs.com',
+      bucket: 'test-bucket',
+      accessKey: 'test-key',
+      secretKey: 'test-secret',
+      region: 'cn-hangzhou',
+    };
+
+    it('uses bucket probing for static mode', async () => {
+      const send = vi.fn().mockResolvedValue({});
+      storage.setConfig(config);
+      (storage as any).client = { send };
+
+      await expect(storage.testConnection()).resolves.toBe(true);
+
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send.mock.calls[0][0].constructor.name).toBe('HeadBucketCommand');
+    });
+
+    it('uses the allowed repository prefix for namespaced STS mode', async () => {
+      const send = vi.fn().mockResolvedValue({});
+      storage.setConfig({
+        ...config,
+        securityToken: 'test-security-token',
+        storagePrefix: 'tenants/user/vaults/main',
+      });
+      storage.setNamespace('repo-id');
+      (storage as any).client = { send };
+
+      await expect(storage.testConnection()).resolves.toBe(true);
+
+      const command = send.mock.calls[0][0];
+      expect(command.constructor.name).toBe('ListObjectsV2Command');
+      expect(command.input).toEqual({
+        Bucket: 'test-bucket',
+        Prefix: 'tenants/user/vaults/main/repos/repo-id/',
+        MaxKeys: 1,
+      });
+    });
+  });
+
   describe('destroy', () => {
     it('应该清理资源', () => {
       storage.destroy();

@@ -2,6 +2,7 @@ import { App, Notice, TFile } from 'obsidian';
 import { EncryptedPackage, RepoMetadata, SyncSettings, SyncStatus, SyncResult, SyncEvent, IndexEntry } from '../types';
 import { LocalIndex } from './LocalIndex';
 import { RemoteLayoutMigrationResult, RemoteLayoutStatus, RemoteStorage } from './RemoteStorage';
+import { StsCredentialProvider } from './StsCredentialProvider';
 import { CryptoService } from '../crypto/CryptoService';
 import { ConcurrentQueue } from '../utils/concurrency';
 import { IncrementalSync, SyncStatsCollector } from '../utils/incremental';
@@ -47,6 +48,7 @@ export class SyncManager {
   public localIndex: LocalIndex;
   private remoteStorage: RemoteStorage;
   public crypto: CryptoService;
+  private credentialProvider: StsCredentialProvider;
   private stateManager: SyncStateManager;
   private incrementalSync: IncrementalSync | null = null;
   private status: SyncStatus = 'idle';
@@ -55,6 +57,7 @@ export class SyncManager {
   private statsCollector: SyncStatsCollector;
   private abortController: AbortController | null = null;
   private static readonly LOCAL_INDEX_KEY = 'local-index';
+  private static readonly PLUGIN_VERSION = '0.1.0';
 
   constructor(
     app: App,
@@ -69,6 +72,7 @@ export class SyncManager {
     this.crypto = new CryptoService();
     this.localIndex = new LocalIndex(app, this.crypto);
     this.remoteStorage = new RemoteStorage();
+    this.credentialProvider = new StsCredentialProvider();
     this.stateManager = new SyncStateManager();
     this.statsCollector = new SyncStatsCollector();
   }
@@ -115,9 +119,8 @@ export class SyncManager {
       throw new SyncError(SyncErrorCode.CONFIG_MISSING, '同步未配置，请检查设置');
     }
 
+    await this.configureRemoteStorage();
     await this.initCrypto();
-    this.remoteStorage.setConfig(this.settings.s3);
-    this.remoteStorage.setNamespace(this.settings.repoId, this.settings.s3.storagePrefix);
     return await this.remoteStorage.testConnection();
   }
 
@@ -127,8 +130,7 @@ export class SyncManager {
     }
 
     await this.ensureLocalRepoId();
-    this.remoteStorage.setConfig(this.settings.s3);
-    this.remoteStorage.setNamespace(this.settings.repoId, this.settings.s3.storagePrefix);
+    await this.configureRemoteStorage();
     await this.remoteStorage.testConnection();
     return this.remoteStorage.detectLayout(this.settings.repoId);
   }
@@ -139,8 +141,7 @@ export class SyncManager {
     }
 
     await this.ensureLocalRepoId();
-    this.remoteStorage.setConfig(this.settings.s3);
-    this.remoteStorage.setNamespace(this.settings.repoId, this.settings.s3.storagePrefix);
+    await this.configureRemoteStorage();
     await this.remoteStorage.testConnection();
     return this.remoteStorage.migrateLegacyLayout(this.settings.repoId);
   }
@@ -200,16 +201,14 @@ export class SyncManager {
         throw new SyncError(SyncErrorCode.CONFIG_MISSING, '同步未配置，请检查设置。');
       }
 
-      // 初始化加密
-      await this.initCrypto();
       new Notice('正在同步...');
 
       // 更新进度
       this.stateManager.startSync();
 
       // 连接远端存储
-      this.remoteStorage.setConfig(this.settings.s3);
-      this.remoteStorage.setNamespace(this.settings.repoId, this.settings.s3.storagePrefix);
+      await this.configureRemoteStorage();
+      await this.initCrypto();
       await this.remoteStorage.testConnection();
 
       // 确保仓库存在
@@ -545,6 +544,26 @@ export class SyncManager {
     console.log('[同步管理器] 创建新仓库：', this.settings.repoId);
   }
 
+  private async configureRemoteStorage(): Promise<void> {
+    if ((this.settings.credentialMode || 'static') === 'static') {
+      await this.ensureLocalRepoId();
+    }
+
+    const session = await this.credentialProvider.getCredentials(this.settings, SyncManager.PLUGIN_VERSION);
+
+    if (session.repoId && session.repoId !== this.settings.repoId) {
+      this.settings.repoId = session.repoId;
+      this.crypto.clearKey();
+      await this.persistence.saveSettings();
+    }
+    if (!this.settings.repoId) {
+      await this.ensureLocalRepoId();
+    }
+
+    this.remoteStorage.setConfig(session.s3);
+    this.remoteStorage.setNamespace(this.settings.repoId, session.s3.storagePrefix);
+  }
+
   /**
    * 追加事件到日志
    */
@@ -728,7 +747,17 @@ export class SyncManager {
    * 检查同步是否已配置
    */
   isConfigured(): boolean {
-    const { s3, syncPassword } = this.settings;
+    const { s3, sts, syncPassword } = this.settings;
+    const mode = this.settings.credentialMode || 'static';
+    if (mode === 'sts') {
+      return Boolean(
+        sts.authServerUrl &&
+        sts.authToken &&
+        syncPassword &&
+        this.settings.deviceId
+      );
+    }
+
     return Boolean(
       s3.endpoint &&
       s3.bucket &&
@@ -743,6 +772,7 @@ export class SyncManager {
    */
   updateSettings(settings: SyncSettings): void {
     this.settings = settings;
+    this.credentialProvider.clear();
 
     if (this.crypto.hasKey()) {
       this.crypto.clearKey();
@@ -769,6 +799,7 @@ export class SyncManager {
     this.stopAutoSync();
     this.cancelSync();
     this.crypto.clearKey();
+    this.credentialProvider.clear();
     this.remoteStorage.destroy();
     console.log('[同步管理器] 已销毁');
   }

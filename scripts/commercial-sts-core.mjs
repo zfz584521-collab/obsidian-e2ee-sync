@@ -1,0 +1,193 @@
+import crypto from 'node:crypto';
+
+const DEFAULT_MAX_DEVICES = 3;
+const DEFAULT_DURATION_SECONDS = 3600;
+
+export function hashSecret(value, salt = '') {
+  return crypto
+    .createHash('sha256')
+    .update(String(salt))
+    .update(':')
+    .update(String(value || ''))
+    .digest('hex');
+}
+
+export function safeSegment(value, fallback = 'main') {
+  const normalized = String(value || '')
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return normalized || fallback;
+}
+
+export function makeStoragePrefix(userId, vaultId) {
+  return `tenants/${safeSegment(userId, 'user')}/vaults/${safeSegment(vaultId, 'main')}`;
+}
+
+export function makeRepoId(userId, vaultId) {
+  return `repo_${safeSegment(userId, 'user')}_${safeSegment(vaultId, 'main')}`;
+}
+
+export function redactAuditEvent(event, { deviceSalt = 'device', tokenSalt = 'token' } = {}) {
+  const redacted = { ...event };
+  if (redacted.deviceId) {
+    redacted.deviceIdHash = hashSecret(redacted.deviceId, deviceSalt);
+    delete redacted.deviceId;
+  }
+  if (redacted.authToken) {
+    redacted.authTokenHash = hashSecret(redacted.authToken, tokenSalt);
+    delete redacted.authToken;
+  }
+  delete redacted.accessKeySecret;
+  delete redacted.securityToken;
+  delete redacted.syncPassword;
+  return redacted;
+}
+
+export class InMemoryCommercialStore {
+  constructor({ tokenSalt = 'dev-token-salt', deviceSalt = 'dev-device-salt' } = {}) {
+    this.tokenSalt = tokenSalt;
+    this.deviceSalt = deviceSalt;
+    this.users = new Map();
+    this.tokens = new Map();
+    this.devices = new Map();
+    this.auditLogs = [];
+  }
+
+  addUser(user) {
+    this.users.set(user.id, {
+      status: 'active',
+      plan: 'starter',
+      maxDevices: DEFAULT_MAX_DEVICES,
+      ...user,
+    });
+  }
+
+  addToken({ token, userId, status = 'active', expiresAt }) {
+    this.tokens.set(hashSecret(token, this.tokenSalt), {
+      userId,
+      status,
+      expiresAt,
+    });
+  }
+
+  findToken(token) {
+    return this.tokens.get(hashSecret(token, this.tokenSalt)) || null;
+  }
+
+  getUser(userId) {
+    return this.users.get(userId) || null;
+  }
+
+  setUserStatus(userId, status) {
+    const user = this.users.get(userId);
+    if (!user) return false;
+    user.status = status;
+    return true;
+  }
+
+  setTokenStatus(token, status) {
+    const entry = this.tokens.get(hashSecret(token, this.tokenSalt));
+    if (!entry) return false;
+    entry.status = status;
+    return true;
+  }
+
+  registerDevice(userId, deviceId, maxDevices = DEFAULT_MAX_DEVICES) {
+    const key = `${userId}:${hashSecret(deviceId, this.deviceSalt)}`;
+    if (this.devices.has(key)) {
+      const existing = this.devices.get(key);
+      existing.lastSeenAt = Date.now();
+      return { accepted: true, deviceCount: this.countDevices(userId), existing: true };
+    }
+
+    const deviceCount = this.countDevices(userId);
+    if (deviceCount >= maxDevices) {
+      return { accepted: false, deviceCount, existing: false };
+    }
+
+    this.devices.set(key, {
+      userId,
+      deviceIdHash: hashSecret(deviceId, this.deviceSalt),
+      firstSeenAt: Date.now(),
+      lastSeenAt: Date.now(),
+    });
+    return { accepted: true, deviceCount: deviceCount + 1, existing: false };
+  }
+
+  countDevices(userId) {
+    let count = 0;
+    for (const device of this.devices.values()) {
+      if (device.userId === userId) count++;
+    }
+    return count;
+  }
+
+  writeAudit(event) {
+    this.auditLogs.push(redactAuditEvent({
+      ...event,
+      createdAt: Date.now(),
+    }, {
+      deviceSalt: this.deviceSalt,
+      tokenSalt: this.tokenSalt,
+    }));
+  }
+}
+
+export function createCredentialResponse({ userId, vaultId, repoId, oss, credentials, now = Date.now() }) {
+  const safeVaultId = safeSegment(vaultId, 'main');
+  const generatedRepoId = makeRepoId(userId, safeVaultId);
+  const finalRepoId = repoId ? safeSegment(repoId, generatedRepoId) : generatedRepoId;
+  return {
+    endpoint: oss.endpoint,
+    bucket: oss.bucket,
+    region: oss.region || 'auto',
+    storagePrefix: makeStoragePrefix(userId, safeVaultId),
+    repoId: finalRepoId,
+    credentials: {
+      accessKeyId: credentials.accessKeyId,
+      accessKeySecret: credentials.accessKeySecret,
+      securityToken: credentials.securityToken,
+      expiration: credentials.expiration || new Date(now + DEFAULT_DURATION_SECONDS * 1000).toISOString(),
+    },
+  };
+}
+
+export function authorizeCredentialRequest({ store, authToken, body, now = Date.now() }) {
+  if (!authToken) {
+    return { ok: false, status: 401, message: '缺少授权令牌' };
+  }
+  if (!body?.deviceId) {
+    return { ok: false, status: 400, message: '缺少设备 ID' };
+  }
+
+  const token = store.findToken(authToken);
+  if (!token || token.status !== 'active') {
+    return { ok: false, status: 401, message: '授权令牌无效或已过期' };
+  }
+  if (token.expiresAt && Date.parse(token.expiresAt) <= now) {
+    return { ok: false, status: 401, message: '授权令牌无效或已过期' };
+  }
+
+  const user = store.getUser(token.userId);
+  if (!user || user.status !== 'active') {
+    return { ok: false, status: 403, message: '用户已停用或不可用' };
+  }
+
+  const device = store.registerDevice(user.id, body.deviceId, user.maxDevices);
+  if (!device.accepted) {
+    return { ok: false, status: 403, message: '设备数量已达到当前套餐上限' };
+  }
+
+  const vaultId = safeSegment(body.vaultId, 'main');
+  const generatedRepoId = makeRepoId(user.id, vaultId);
+  return {
+    ok: true,
+    status: 200,
+    user,
+    vaultId,
+    repoId: body.repoId ? safeSegment(body.repoId, generatedRepoId) : generatedRepoId,
+    deviceCount: device.deviceCount,
+  };
+}

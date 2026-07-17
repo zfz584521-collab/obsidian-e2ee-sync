@@ -6,6 +6,13 @@
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "mock:sts": "node scripts/mock-sts-server.mjs",
+    "server:commercial-sts": "node scripts/commercial-sts-server.mjs",
+    "admin:commercial-sts": "node scripts/commercial-sts-admin.mjs",
+    "policy:oss-sts": "node scripts/aliyun-oss-sts-policy.mjs",
+    "preflight:commercial-sts": "node scripts/commercial-sts-preflight.mjs",
+    "smoke:aliyun-sts": "node scripts/aliyun-sts-smoke.mjs",
+    "smoke:aliyun-oss-sts": "node scripts/aliyun-oss-sts-smoke.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

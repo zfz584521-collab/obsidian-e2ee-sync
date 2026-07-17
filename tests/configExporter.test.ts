@@ -10,13 +10,21 @@ vi.mock('obsidian', () => ({
 import { ConfigExporter } from '../src/utils/ConfigExporter';
 
 const settings: SyncSettings = {
+  credentialMode: 'static',
   s3: {
     endpoint: 'https://oss.example.test',
     bucket: 'notes-bucket',
     accessKey: 'ACCESS_KEY_SHOULD_NOT_EXPORT',
     secretKey: 'SECRET_SHOULD_NOT_EXPORT',
+    securityToken: 'SECURITY_TOKEN_SHOULD_NOT_EXPORT',
     region: 'auto',
     storagePrefix: 'personal-channel',
+  },
+  sts: {
+    authServerUrl: 'https://sync.example.test',
+    authToken: 'AUTH_TOKEN_SHOULD_NOT_EXPORT',
+    vaultId: 'main',
+    refreshSkewMs: 300000,
   },
   syncPassword: 'PASSWORD_SHOULD_NOT_EXPORT',
   deviceId: 'dev_original_device',
@@ -43,6 +51,9 @@ describe('ConfigExporter', () => {
 
     expect(exported.settings.s3.accessKey).toBe('');
     expect(exported.settings.s3.secretKey).toBe('');
+    expect(exported.settings.s3.securityToken).toBe('');
+    expect(exported.settings.sts.authToken).toBe('');
+    expect(exported.settings.sts.authServerUrl).toBe(settings.sts.authServerUrl);
     expect(exported.settings.syncPassword).toBe('');
     expect(exported.settings.deviceId).toBe('');
   });

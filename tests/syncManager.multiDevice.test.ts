@@ -14,8 +14,11 @@ vi.mock('obsidian', () => {
 
   return {
     App: class MockApp {},
+    Modal: class MockModal {},
+    Setting: class MockSetting {},
     TFile: MockTFile,
     Notice: vi.fn(),
+    requestUrl: vi.fn(),
   };
 });
 
@@ -266,6 +269,7 @@ const baseSettings = (
   repoId = 'repo_multi_device_test',
   storagePrefix = ''
 ): SyncSettings => ({
+  credentialMode: 'static',
   s3: {
     endpoint: 'https://memory.example.test',
     bucket: 'test-bucket',
@@ -273,6 +277,12 @@ const baseSettings = (
     secretKey: 'test-secret',
     region: 'auto',
     storagePrefix,
+  },
+  sts: {
+    authServerUrl: '',
+    authToken: '',
+    vaultId: 'main',
+    refreshSkewMs: 300000,
   },
   syncPassword: 'shared-password',
   deviceId,
@@ -332,6 +342,31 @@ describe('SyncManager multi-device integration', () => {
     expect(await vaultB.readText('test-a.md')).toBe('# A\n');
     expect(await vaultB.readText('folder/test-b.md')).toBe('folder file\n');
     expect(await vaultB.readText('assets/test.txt')).toBe('asset text\n');
+  });
+
+  it('creates a repo namespace before first static sync when repoId is empty', async () => {
+    const sharedRemote = new SharedRemote();
+    const vault = new MemoryVault();
+    const settings = baseSettings('dev-first-static', '');
+    const persistence = new MemoryPersistence();
+    const manager = new SyncManager(vault as any, persistence, settings, {
+      concurrentUploads: 1,
+      concurrentDownloads: 1,
+    });
+    (manager as any).remoteStorage = new MemoryRemoteStorage(sharedRemote);
+
+    await manager.initialize();
+    vault.writeText('first.md', 'first sync\n');
+    const result = await manager.startSync();
+
+    expect(result.success).toBe(true);
+    expect(settings.repoId).toMatch(/^repo_/);
+    const allRemoteKeys = [
+      ...sharedRemote.content.keys(),
+      ...sharedRemote.logs.keys(),
+      ...sharedRemote.metadata.keys(),
+    ];
+    expect(allRemoteKeys.every(key => key.startsWith(`repos/${settings.repoId}/`))).toBe(true);
   });
 
   it('downloads device B modifications back to device A', async () => {
@@ -520,5 +555,64 @@ describe('SyncManager multi-device integration', () => {
     expect(allRemoteKeys.every(key => key.startsWith('shared-bucket-prefix/repos/'))).toBe(true);
     expect(allRemoteKeys.some(key => key.includes('/repo_user_one/'))).toBe(true);
     expect(allRemoteKeys.some(key => key.includes('/repo_user_two/'))).toBe(true);
+  });
+
+  it('uses backend STS credentials and namespace during sync', async () => {
+    const sharedRemote = new SharedRemote();
+    const vault = new MemoryVault();
+    const persistence = new MemoryPersistence();
+    const stsSettings = baseSettings('dev-commercial', 'repo_local_before_sts');
+    stsSettings.credentialMode = 'sts';
+    stsSettings.s3 = {
+      endpoint: '',
+      bucket: '',
+      accessKey: '',
+      secretKey: '',
+      securityToken: '',
+      region: 'auto',
+      storagePrefix: '',
+    };
+    stsSettings.sts = {
+      authServerUrl: 'https://sync.example.test',
+      authToken: 'commercial-token',
+      vaultId: 'main',
+      refreshSkewMs: 300000,
+    };
+
+    const manager = new SyncManager(vault as any, persistence, stsSettings, {
+      concurrentUploads: 1,
+      concurrentDownloads: 1,
+    });
+    (manager as any).remoteStorage = new MemoryRemoteStorage(sharedRemote);
+    (manager as any).credentialProvider = {
+      getCredentials: vi.fn().mockResolvedValue({
+        s3: {
+          endpoint: 'https://oss-cn-hangzhou.aliyuncs.com',
+          bucket: 'commercial-bucket',
+          accessKey: 'temporary-access-key',
+          secretKey: 'temporary-secret-key',
+          securityToken: 'temporary-security-token',
+          region: 'cn-hangzhou',
+          storagePrefix: 'tenants/u_10001/vaults/main',
+        },
+        repoId: 'repo_from_backend',
+        expirationMs: Date.now() + 3600000,
+      }),
+      clear: vi.fn(),
+    };
+
+    await manager.initialize();
+    vault.writeText('commercial.md', 'commercial content\n');
+    const result = await manager.startSync();
+
+    expect(result.success).toBe(true);
+    expect(stsSettings.repoId).toBe('repo_from_backend');
+    const allRemoteKeys = [
+      ...sharedRemote.content.keys(),
+      ...sharedRemote.logs.keys(),
+      ...sharedRemote.metadata.keys(),
+    ];
+    expect(allRemoteKeys.length).toBeGreaterThan(0);
+    expect(allRemoteKeys.every(key => key.startsWith('tenants/u_10001/vaults/main/repos/repo_from_backend/'))).toBe(true);
   });
 });
