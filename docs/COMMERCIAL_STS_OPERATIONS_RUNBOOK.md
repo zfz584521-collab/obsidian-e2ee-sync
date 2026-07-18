@@ -16,6 +16,12 @@
 
 第一版可以由运营人员手工开通：
 
+查看运营 CLI 支持的命令：
+
+```powershell
+npm.cmd run admin:commercial-sts -- help
+```
+
 ```text
 1. 创建 userId，例如 u_10001。
 2. 创建授权令牌，只展示一次给用户。

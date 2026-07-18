@@ -63,6 +63,32 @@ function writeTokenFile(filePath, token) {
   });
 }
 
+function getHelp() {
+  return {
+    success: true,
+    action: 'help',
+    commands: [
+      'create-user <userId> [maxDevices]',
+      'issue-token <userId> [expiresInDays]',
+      'disable-user <userId>',
+      'enable-user <userId>',
+      'user-status <userId>',
+      'list-tokens <userId>',
+      'revoke-token',
+      'revoke-token-hash',
+      'list-devices <userId>',
+      'forget-device <userId>',
+      'audit-log [userId] [limit]',
+      'help',
+    ],
+    sensitiveInputs: [
+      'AUTH_TOKEN_TO_REVOKE',
+      'TOKEN_HASH_TO_REVOKE',
+      'DEVICE_ID_TO_FORGET',
+    ],
+  };
+}
+
 export function runAdminCommand({
   env = process.env,
   argv = process.argv.slice(2),
@@ -70,6 +96,11 @@ export function runAdminCommand({
   generateToken = () => `obsync_${crypto.randomBytes(32).toString('base64url')}`,
 } = {}) {
   const [command, rawUserId, rawValue] = argv;
+
+  if (!command || command === 'help' || command === '--help' || command === '-h') {
+    return getHelp();
+  }
+
   const store = loadAdminStore(env);
 
   if (command === 'create-user') {

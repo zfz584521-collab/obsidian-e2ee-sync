@@ -40,6 +40,18 @@ function hashSecret(value: string, salt: string) {
 }
 
 describe('commercial STS admin CLI', () => {
+  it('shows command help without requiring production environment variables', () => {
+    const report = runAdminCommand({ env: {}, argv: ['help'] });
+
+    expect(report).toMatchObject({
+      success: true,
+      action: 'help',
+    });
+    expect(report.commands).toContain('create-user <userId> [maxDevices]');
+    expect(report.commands).toContain('issue-token <userId> [expiresInDays]');
+    expect(JSON.stringify(report)).not.toContain('TOKEN_SALT');
+  });
+
   it('creates users and issues tokens only through a protected file', () => {
     const env = createEnv();
     expect(runAdminCommand({ env, argv: ['create-user', 'u_10001', '2'] })).toMatchObject({

@@ -66,6 +66,12 @@ curl --fail https://你的授权域名/readyz
 
 ## 四、创建首位用户
 
+查看运营 CLI 支持的命令：
+
+```bash
+docker compose exec backend node scripts/commercial-sts-admin.mjs help
+```
+
 创建最多使用三台设备的用户：
 
 ```bash
