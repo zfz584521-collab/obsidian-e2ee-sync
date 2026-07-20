@@ -32,6 +32,23 @@ function requireUserId(value) {
   return raw;
 }
 
+function requirePlan(value) {
+  const raw = String(value || '').trim();
+  const normalized = safeSegment(raw, '');
+  if (!raw || normalized !== raw) {
+    throw new Error('plan must contain only letters, numbers, underscores, or hyphens');
+  }
+  return raw;
+}
+
+function parseMaxDevices(value, fallback = 3) {
+  const maxDevices = Number(value || fallback);
+  if (!Number.isInteger(maxDevices) || maxDevices < 1 || maxDevices > 20) {
+    throw new Error('maxDevices must be an integer between 1 and 20');
+  }
+  return maxDevices;
+}
+
 function defaultTokenOutputPath(storePath, userId, now) {
   const timestamp = new Date(now).toISOString().replace(/[:.]/g, '-');
   return path.join(path.dirname(path.resolve(storePath)), `issued-token-${userId}-${timestamp}.secret`);
@@ -77,6 +94,7 @@ function getHelp() {
     action: 'help',
     commands: [
       'create-user <userId> [maxDevices]',
+      'update-user <userId> <plan> [maxDevices]',
       'issue-token <userId> [expiresInDays]',
       'disable-user <userId>',
       'enable-user <userId>',
@@ -115,12 +133,25 @@ export function runAdminCommand({
   if (command === 'create-user') {
     const userId = requireUserId(rawUserId);
     if (store.getUser(userId)) throw new Error('User already exists');
-    const maxDevices = Number(rawValue || 3);
-    if (!Number.isInteger(maxDevices) || maxDevices < 1 || maxDevices > 20) {
-      throw new Error('maxDevices must be an integer between 1 and 20');
-    }
+    const maxDevices = parseMaxDevices(rawValue);
     store.addUser({ id: userId, status: 'active', plan: 'starter', maxDevices });
     return { success: true, action: 'create-user', userId, maxDevices };
+  }
+
+  if (command === 'update-user') {
+    const userId = requireUserId(rawUserId);
+    const plan = requirePlan(rawValue);
+    const existing = store.getUser(userId);
+    if (!existing) throw new Error('User not found');
+    const maxDevices = parseMaxDevices(argv[3], existing.maxDevices);
+    const user = store.updateUser(userId, { plan, maxDevices });
+    return {
+      success: true,
+      action: 'update-user',
+      userId,
+      plan: user.plan,
+      maxDevices: user.maxDevices,
+    };
   }
 
   if (command === 'issue-token') {

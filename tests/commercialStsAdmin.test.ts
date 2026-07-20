@@ -113,6 +113,31 @@ describe('commercial STS admin CLI', () => {
     expect(JSON.stringify(revokeReport)).not.toContain('TOKEN_TO_REVOKE');
   });
 
+  it('updates user plans and device limits for manual commercial operations', () => {
+    const env = createEnv();
+    runAdminCommand({ env, argv: ['create-user', 'u_10001', '1'] });
+
+    const updated = runAdminCommand({ env, argv: ['update-user', 'u_10001', 'pro', '5'] });
+
+    expect(updated).toEqual({
+      success: true,
+      action: 'update-user',
+      userId: 'u_10001',
+      plan: 'pro',
+      maxDevices: 5,
+    });
+    expect(runAdminCommand({ env, argv: ['user-status', 'u_10001'] })).toMatchObject({
+      userId: 'u_10001',
+      plan: 'pro',
+      maxDevices: 5,
+    });
+
+    expect(runAdminCommand({ env, argv: ['update-user', 'u_10001', 'team'] })).toMatchObject({
+      plan: 'team',
+      maxDevices: 5,
+    });
+  });
+
   it('lists token hashes and revokes by token hash when raw token is unavailable', () => {
     const env = createEnv();
     runAdminCommand({ env, argv: ['create-user', 'u_10001'] });
@@ -365,7 +390,15 @@ describe('commercial STS admin CLI', () => {
       env,
       argv: ['audit-summary', 'u_10001', '10081'],
     })).toThrow('windowMinutes must be an integer between 1 and 10080');
+    expect(() => runAdminCommand({
+      env,
+      argv: ['update-user', 'u_10001', '../pro', '3'],
+    })).toThrow('plan must contain only letters, numbers, underscores, or hyphens');
     runAdminCommand({ env, argv: ['create-user', 'u_10001'] });
+    expect(() => runAdminCommand({
+      env,
+      argv: ['update-user', 'u_10001', 'pro', '0'],
+    })).toThrow('maxDevices must be an integer between 1 and 20');
     expect(() => runAdminCommand({
       env,
       argv: ['issue-token', 'u_10001', '367'],

@@ -93,6 +93,14 @@ export class InMemoryCommercialStore {
     return true;
   }
 
+  updateUser(userId, updates) {
+    const user = this.users.get(userId);
+    if (!user) return null;
+    if (updates.plan !== undefined) user.plan = updates.plan;
+    if (updates.maxDevices !== undefined) user.maxDevices = updates.maxDevices;
+    return { ...user };
+  }
+
   setTokenStatus(token, status) {
     const entry = this.tokens.get(hashSecret(token, this.tokenSalt));
     if (!entry) return false;

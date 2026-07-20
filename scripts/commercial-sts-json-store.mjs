@@ -69,6 +69,12 @@ export class JsonFileCommercialStore extends InMemoryCommercialStore {
     return changed;
   }
 
+  updateUser(userId, updates) {
+    const user = super.updateUser(userId, updates);
+    if (user) this.persist();
+    return user;
+  }
+
   setTokenStatus(token, status) {
     const changed = super.setTokenStatus(token, status);
     if (changed) this.persist();

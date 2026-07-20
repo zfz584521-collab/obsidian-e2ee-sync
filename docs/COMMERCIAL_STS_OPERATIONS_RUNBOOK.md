@@ -46,6 +46,14 @@ npm.cmd run admin:commercial-sts -- issue-token u_10001 30
 npm.cmd run admin:commercial-sts -- list-tokens u_10001
 ```
 
+用户从试用升级、降级或调整设备额度时，更新套餐和最大设备数：
+
+```powershell
+npm.cmd run admin:commercial-sts -- update-user u_10001 pro 5
+```
+
+`plan` 只允许字母、数字、下划线和连字符；`maxDevices` 允许 1 到 20。
+
 如果已经没有明文令牌，但能从 `list-tokens` 或审计记录定位到 token hash，可以按哈希吊销：
 
 ```powershell
