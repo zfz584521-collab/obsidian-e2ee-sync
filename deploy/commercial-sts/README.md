@@ -107,6 +107,13 @@ docker compose exec \
 docker compose exec backend node scripts/commercial-sts-admin.mjs user-status customer_001
 ```
 
+查看用户清单、状态、套餐和设备占用：
+
+```bash
+docker compose exec backend node scripts/commercial-sts-admin.mjs list-users
+docker compose exec backend node scripts/commercial-sts-admin.mjs list-users 200
+```
+
 升级、降级或调整设备额度：
 
 ```bash

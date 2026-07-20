@@ -138,6 +138,59 @@ describe('commercial STS admin CLI', () => {
     });
   });
 
+  it('lists users with redacted operational status and device counts', () => {
+    const env = createEnv();
+    runAdminCommand({ env, argv: ['create-user', 'u_10001', '2'] });
+    runAdminCommand({ env, argv: ['create-user', 'u_20002', '1'] });
+    runAdminCommand({
+      env,
+      argv: ['issue-token', 'u_10001'],
+      generateToken: () => 'RAW_LIST_USERS_TOKEN',
+    });
+
+    const storeData = JSON.parse(fs.readFileSync(env.STORE_PATH, 'utf8'));
+    storeData.devices = [
+      {
+        key: `u_10001:${hashSecret('RAW_DEVICE_ONE', env.DEVICE_SALT)}`,
+        value: {
+          userId: 'u_10001',
+          deviceIdHash: hashSecret('RAW_DEVICE_ONE', env.DEVICE_SALT),
+          firstSeenAt: 1,
+          lastSeenAt: 2,
+        },
+      },
+    ];
+    fs.writeFileSync(env.STORE_PATH, JSON.stringify(storeData, null, 2), 'utf8');
+
+    const report = runAdminCommand({ env, argv: ['list-users', '10'] });
+
+    expect(report).toEqual({
+      success: true,
+      action: 'list-users',
+      limit: 10,
+      count: 2,
+      users: [
+        {
+          userId: 'u_10001',
+          status: 'active',
+          plan: 'starter',
+          maxDevices: 2,
+          deviceCount: 1,
+        },
+        {
+          userId: 'u_20002',
+          status: 'active',
+          plan: 'starter',
+          maxDevices: 1,
+          deviceCount: 0,
+        },
+      ],
+    });
+    expect(JSON.stringify(report)).not.toContain('RAW_LIST_USERS_TOKEN');
+    expect(JSON.stringify(report)).not.toContain('RAW_DEVICE_ONE');
+    expect(JSON.stringify(report)).not.toContain(hashSecret('RAW_DEVICE_ONE', env.DEVICE_SALT));
+  });
+
   it('verifies the persistent store with redacted operational counts', () => {
     const env = createEnv();
     runAdminCommand({ env, argv: ['create-user', 'u_10001'] });
@@ -415,6 +468,10 @@ describe('commercial STS admin CLI', () => {
       env,
       argv: ['audit-summary', 'u_10001', '10081'],
     })).toThrow('windowMinutes must be an integer between 1 and 10080');
+    expect(() => runAdminCommand({
+      env,
+      argv: ['list-users', '501'],
+    })).toThrow('limit must be an integer between 1 and 500');
     expect(() => runAdminCommand({
       env,
       argv: ['update-user', 'u_10001', '../pro', '3'],

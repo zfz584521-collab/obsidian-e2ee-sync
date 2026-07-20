@@ -127,6 +127,19 @@ export class InMemoryCommercialStore {
       .sort((a, b) => a.tokenHash.localeCompare(b.tokenHash));
   }
 
+  listUsers({ limit = 100 } = {}) {
+    return [...this.users.values()]
+      .map(user => ({
+        userId: user.id,
+        status: user.status,
+        plan: user.plan,
+        maxDevices: user.maxDevices,
+        deviceCount: this.countDevices(user.id),
+      }))
+      .sort((a, b) => a.userId.localeCompare(b.userId))
+      .slice(0, limit);
+  }
+
   registerDevice(userId, deviceId, maxDevices = DEFAULT_MAX_DEVICES) {
     const key = `${userId}:${hashSecret(deviceId, this.deviceSalt)}`;
     if (this.devices.has(key)) {

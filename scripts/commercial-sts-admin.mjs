@@ -62,6 +62,14 @@ function parseAuditLimit(value) {
   return limit;
 }
 
+function parseListUsersLimit(value) {
+  const limit = Number(value || 100);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
+    throw new Error('limit must be an integer between 1 and 500');
+  }
+  return limit;
+}
+
 function parseAuditWindowMinutes(value) {
   const minutes = Number(value || 60);
   if (!Number.isInteger(minutes) || minutes < 1 || minutes > 10080) {
@@ -98,6 +106,7 @@ function getHelp() {
       'issue-token <userId> [expiresInDays]',
       'disable-user <userId>',
       'enable-user <userId>',
+      'list-users [limit]',
       'user-status <userId>',
       'list-tokens <userId>',
       'revoke-token',
@@ -174,6 +183,18 @@ export function runAdminCommand({
     const status = command === 'disable-user' ? 'disabled' : 'active';
     if (!store.setUserStatus(userId, status)) throw new Error('User not found');
     return { success: true, action: command, userId, status };
+  }
+
+  if (command === 'list-users') {
+    const limit = parseListUsersLimit(rawUserId);
+    const users = store.listUsers({ limit });
+    return {
+      success: true,
+      action: 'list-users',
+      limit,
+      count: users.length,
+      users,
+    };
   }
 
   if (command === 'revoke-token') {

@@ -46,6 +46,15 @@ npm.cmd run admin:commercial-sts -- issue-token u_10001 30
 npm.cmd run admin:commercial-sts -- list-tokens u_10001
 ```
 
+查看用户清单、状态、套餐和设备占用：
+
+```powershell
+npm.cmd run admin:commercial-sts -- list-users
+npm.cmd run admin:commercial-sts -- list-users 200
+```
+
+用户清单不输出授权令牌、令牌哈希、设备 ID 或设备哈希。
+
 用户从试用升级、降级或调整设备额度时，更新套餐和最大设备数：
 
 ```powershell
