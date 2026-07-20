@@ -13,6 +13,8 @@
 - 商业授权服务骨架：本地 mock、最小 JSON store、运营 CLI、健康检查、限流、Docker Compose + Caddy 部署示例。
 - 阿里云 STS 与 OSS 脱敏联调脚本：支持 AssumeRole 冒烟测试、OSS 前缀 List/Put/Get/Delete 验证和跨租户拒绝验证。
 - 多设备仓库命名空间隔离：远端对象进入 `storagePrefix/repos/{repoId}/`，降低跨仓库串数据风险。
+- 运营 CLI 补充：支持 `update-user` 调整套餐与设备额度、`audit-summary` 输出脱敏审计汇总、`verify-store` 做持久化存储只读校验。
+- 发布打包工具：`npm.cmd run package` 会构建并生成包含 `main.js`、`manifest.json`、`styles.css` 和用户手册的发布 zip。
 
 ### 修复
 
@@ -27,7 +29,7 @@
 
 ### 验证
 
-- 23 个测试文件、151 条测试通过。
+- 24 个测试文件、164 条测试通过。
 - 生产构建通过。
 - 已完成 `https://sync.e2note.com` HTTPS、CORS、401、STS 签发、真实 OSS 前缀 CRUD、跨租户拒绝和双 Obsidian 库双向同步闭环验证。
 
