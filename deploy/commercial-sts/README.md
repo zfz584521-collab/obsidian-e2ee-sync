@@ -175,6 +175,7 @@ docker compose exec backend node scripts/commercial-sts-admin.mjs audit-summary 
 备份文件包含用户和令牌哈希，仍应作为敏感数据保存：
 
 ```bash
+docker compose exec backend node scripts/commercial-sts-admin.mjs verify-store
 mkdir -p backup
 docker compose cp backend:/app/data/store.json ./backup/store.json
 chmod 600 ./backup/store.json
@@ -187,6 +188,7 @@ docker compose stop backend
 docker compose cp ./backup/store.json backend:/app/data/store.json
 docker compose start backend
 curl --fail https://你的授权域名/healthz
+docker compose exec backend node scripts/commercial-sts-admin.mjs verify-store
 ```
 
 ## 七、更新

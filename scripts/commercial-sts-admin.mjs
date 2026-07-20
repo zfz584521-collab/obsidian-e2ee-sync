@@ -106,6 +106,7 @@ function getHelp() {
       'forget-device <userId>',
       'audit-log [userId] [limit]',
       'audit-summary [userId] [windowMinutes]',
+      'verify-store',
       'help',
     ],
     sensitiveInputs: [
@@ -273,6 +274,15 @@ export function runAdminCommand({
       userId,
       windowMinutes,
       ...summary,
+    };
+  }
+
+  if (command === 'verify-store') {
+    return {
+      success: true,
+      action: 'verify-store',
+      store: 'persistent',
+      counts: store.getOperationalStats(),
     };
   }
 

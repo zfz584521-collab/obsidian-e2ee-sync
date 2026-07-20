@@ -190,6 +190,14 @@ npm.cmd run admin:commercial-sts -- audit-summary u_10001 60
 
 审计查询结果只应包含 `deviceIdHash`、`authTokenHash`、状态码和结果，不应包含明文授权令牌、明文设备 ID、AccessKeySecret、SecurityToken 或同步密码。
 
+备份或恢复 `store.json` 前后，可以做一次只读存储校验：
+
+```powershell
+npm.cmd run admin:commercial-sts -- verify-store
+```
+
+校验结果只输出持久化状态和用户、令牌、设备、审计日志计数；不会输出令牌哈希、设备哈希或任何明文敏感值。
+
 ## 六、最小后端模块
 
 仓库中已有一个后端核心骨架：

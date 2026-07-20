@@ -138,6 +138,31 @@ describe('commercial STS admin CLI', () => {
     });
   });
 
+  it('verifies the persistent store with redacted operational counts', () => {
+    const env = createEnv();
+    runAdminCommand({ env, argv: ['create-user', 'u_10001'] });
+    runAdminCommand({
+      env,
+      argv: ['issue-token', 'u_10001'],
+      generateToken: () => 'RAW_VERIFY_TOKEN',
+    });
+
+    const report = runAdminCommand({ env, argv: ['verify-store'] });
+
+    expect(report).toEqual({
+      success: true,
+      action: 'verify-store',
+      store: 'persistent',
+      counts: {
+        users: 1,
+        tokens: 1,
+        devices: 0,
+        auditLogs: 0,
+      },
+    });
+    expect(JSON.stringify(report)).not.toContain('RAW_VERIFY_TOKEN');
+  });
+
   it('lists token hashes and revokes by token hash when raw token is unavailable', () => {
     const env = createEnv();
     runAdminCommand({ env, argv: ['create-user', 'u_10001'] });
