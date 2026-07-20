@@ -3,6 +3,12 @@ import crypto from 'node:crypto';
 const DEFAULT_MAX_DEVICES = 3;
 const DEFAULT_DURATION_SECONDS = 3600;
 
+function sortedCounts(counts) {
+  return Object.fromEntries(
+    Object.entries(counts).sort(([left], [right]) => left.localeCompare(right)),
+  );
+}
+
 export function hashSecret(value, salt = '') {
   return crypto
     .createHash('sha256')
@@ -172,6 +178,29 @@ export class InMemoryCommercialStore {
       ? this.auditLogs.filter(event => event.userId === userId)
       : this.auditLogs;
     return filtered.slice(-limit).reverse().map(event => ({ ...event }));
+  }
+
+  summarizeAuditLogs({ userId, sinceMs } = {}) {
+    const byResult = {};
+    const byStatus = {};
+    const filtered = this.auditLogs.filter(event => {
+      if (userId && event.userId !== userId) return false;
+      if (sinceMs && Number(event.createdAt || 0) < sinceMs) return false;
+      return true;
+    });
+
+    for (const event of filtered) {
+      const result = String(event.result || 'unknown');
+      const status = String(event.status || 'unknown');
+      byResult[result] = (byResult[result] || 0) + 1;
+      byStatus[status] = (byStatus[status] || 0) + 1;
+    }
+
+    return {
+      total: filtered.length,
+      byResult: sortedCounts(byResult),
+      byStatus: sortedCounts(byStatus),
+    };
   }
 
   getOperationalStats() {

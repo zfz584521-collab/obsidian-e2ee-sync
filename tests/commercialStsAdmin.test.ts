@@ -208,6 +208,77 @@ describe('commercial STS admin CLI', () => {
     expect(JSON.stringify(report)).not.toContain('RAW_AUDIT_TOKEN');
   });
 
+  it('summarizes recent audit logs for lightweight monitoring', () => {
+    const env = createEnv();
+    runAdminCommand({ env, argv: ['create-user', 'u_10001'] });
+    runAdminCommand({
+      env,
+      argv: ['issue-token', 'u_10001'],
+      generateToken: () => 'RAW_SUMMARY_TOKEN',
+    });
+
+    const now = Date.parse('2026-07-18T10:00:00Z');
+    const storeData = JSON.parse(fs.readFileSync(env.STORE_PATH, 'utf8'));
+    storeData.auditLogs = [
+      {
+        userId: 'u_10001',
+        result: 'success',
+        status: 200,
+        createdAt: now - 5 * 60 * 1000,
+      },
+      {
+        userId: 'u_10001',
+        result: 'failed',
+        status: 401,
+        createdAt: now - 10 * 60 * 1000,
+      },
+      {
+        userId: 'u_10001',
+        result: 'rate_limited',
+        status: 429,
+        createdAt: now - 20 * 60 * 1000,
+      },
+      {
+        userId: 'u_20002',
+        result: 'failed',
+        status: 403,
+        createdAt: now - 5 * 60 * 1000,
+      },
+      {
+        userId: 'u_10001',
+        result: 'failed',
+        status: 500,
+        createdAt: now - 2 * 60 * 60 * 1000,
+      },
+    ];
+    fs.writeFileSync(env.STORE_PATH, JSON.stringify(storeData, null, 2), 'utf8');
+
+    const report = runAdminCommand({
+      env,
+      argv: ['audit-summary', 'u_10001', '60'],
+      now,
+    });
+
+    expect(report).toEqual({
+      success: true,
+      action: 'audit-summary',
+      userId: 'u_10001',
+      windowMinutes: 60,
+      total: 3,
+      byResult: {
+        failed: 1,
+        rate_limited: 1,
+        success: 1,
+      },
+      byStatus: {
+        '200': 1,
+        '401': 1,
+        '429': 1,
+      },
+    });
+    expect(JSON.stringify(report)).not.toContain('RAW_SUMMARY_TOKEN');
+  });
+
   it('lists and forgets devices without returning raw device IDs', () => {
     const env = createEnv();
     runAdminCommand({ env, argv: ['create-user', 'u_10001', '2'] });
@@ -290,6 +361,10 @@ describe('commercial STS admin CLI', () => {
       env,
       argv: ['audit-log', 'u_10001', '999'],
     })).toThrow('limit must be an integer between 1 and 200');
+    expect(() => runAdminCommand({
+      env,
+      argv: ['audit-summary', 'u_10001', '10081'],
+    })).toThrow('windowMinutes must be an integer between 1 and 10080');
     runAdminCommand({ env, argv: ['create-user', 'u_10001'] });
     expect(() => runAdminCommand({
       env,

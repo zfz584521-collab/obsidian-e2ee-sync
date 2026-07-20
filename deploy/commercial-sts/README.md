@@ -153,6 +153,15 @@ docker compose exec backend node scripts/commercial-sts-admin.mjs audit-log
 docker compose exec backend node scripts/commercial-sts-admin.mjs audit-log customer_001 50
 ```
 
+查看最近 60 分钟的脱敏审计汇总，用于人工巡检或外部告警脚本：
+
+```bash
+docker compose exec backend node scripts/commercial-sts-admin.mjs audit-summary
+docker compose exec backend node scripts/commercial-sts-admin.mjs audit-summary customer_001 60
+```
+
+审计汇总只输出 `total`、`byResult` 和 `byStatus` 聚合计数。
+
 审计查询结果只包含脱敏哈希、状态码和统计字段，不会输出明文授权令牌或设备 ID。
 
 ## 六、备份和恢复

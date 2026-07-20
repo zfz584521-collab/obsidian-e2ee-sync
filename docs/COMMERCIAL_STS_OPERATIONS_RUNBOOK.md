@@ -171,6 +171,15 @@ npm.cmd run admin:commercial-sts -- audit-log
 npm.cmd run admin:commercial-sts -- audit-log u_10001 50
 ```
 
+查看最近 60 分钟的脱敏审计汇总，用于人工巡检或外部告警脚本：
+
+```powershell
+npm.cmd run admin:commercial-sts -- audit-summary
+npm.cmd run admin:commercial-sts -- audit-summary u_10001 60
+```
+
+审计汇总只输出 `total`、`byResult` 和 `byStatus` 聚合计数，不输出明文授权令牌、明文设备 ID、AccessKeySecret、SecurityToken 或同步密码。
+
 审计查询结果只应包含 `deviceIdHash`、`authTokenHash`、状态码和结果，不应包含明文授权令牌、明文设备 ID、AccessKeySecret、SecurityToken 或同步密码。
 
 ## 六、最小后端模块

@@ -45,6 +45,14 @@ function parseAuditLimit(value) {
   return limit;
 }
 
+function parseAuditWindowMinutes(value) {
+  const minutes = Number(value || 60);
+  if (!Number.isInteger(minutes) || minutes < 1 || minutes > 10080) {
+    throw new Error('windowMinutes must be an integer between 1 and 10080');
+  }
+  return minutes;
+}
+
 function parseTokenExpiresAt(value, now) {
   if (!value) return undefined;
   const days = Number(value);
@@ -79,6 +87,7 @@ function getHelp() {
       'list-devices <userId>',
       'forget-device <userId>',
       'audit-log [userId] [limit]',
+      'audit-summary [userId] [windowMinutes]',
       'help',
     ],
     sensitiveInputs: [
@@ -217,6 +226,22 @@ export function runAdminCommand({
       limit,
       count: logs.length,
       logs,
+    };
+  }
+
+  if (command === 'audit-summary') {
+    const userId = rawUserId ? requireUserId(rawUserId) : undefined;
+    const windowMinutes = parseAuditWindowMinutes(rawValue);
+    const summary = store.summarizeAuditLogs({
+      userId,
+      sinceMs: now - windowMinutes * 60 * 1000,
+    });
+    return {
+      success: true,
+      action: 'audit-summary',
+      userId,
+      windowMinutes,
+      ...summary,
     };
   }
 
