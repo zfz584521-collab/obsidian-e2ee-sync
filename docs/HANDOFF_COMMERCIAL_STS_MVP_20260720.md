@@ -20,8 +20,10 @@ This handoff records the current commercial STS MVP state after the 2026-07-20 o
   - `audit-log [userId] [limit]`
   - `audit-summary [userId] [windowMinutes]`
   - `verify-store`
+  - `backup-manifest`
   - `help`
 - Added `/readyz` for redacted readiness and operational counts.
+- Added `backup-manifest` so backup and restore operations can compare a content-free file size and SHA-256 manifest without exposing the store path or data.
 - Added `npm.cmd run package` for deterministic plugin packaging and zip entry validation.
 - Added an audit log field whitelist so operational logs cannot retain arbitrary request, file path, note content, or raw cloud response fields.
 - Updated release notes and changelog to match the current 0.1.1 state.

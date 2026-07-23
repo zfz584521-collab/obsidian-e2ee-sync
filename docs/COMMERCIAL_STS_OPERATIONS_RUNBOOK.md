@@ -237,6 +237,14 @@ npm.cmd run admin:commercial-sts -- verify-store
 
 校验结果只输出持久化状态和用户、令牌、设备、审计日志计数；不会输出令牌哈希、设备哈希或任何明文敏感值。
 
+需要确认备份文件与恢复后的文件完全一致时，在复制前后各生成一次备份校验清单并比对 `sha256`、`bytes`：
+
+```powershell
+npm.cmd run admin:commercial-sts -- backup-manifest
+```
+
+该命令只输出文件名、大小、修改时间和 SHA-256 摘要，不输出存储路径、用户、令牌、设备、审计记录或文件内容。`store.json` 及其摘要仍属于运营敏感信息，应仅在受控环境中保存和比对。
+
 ## 六、最小后端模块
 
 仓库中已有一个后端核心骨架：

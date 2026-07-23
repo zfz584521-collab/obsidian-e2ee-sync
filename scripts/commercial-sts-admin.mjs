@@ -140,6 +140,7 @@ function getHelp() {
       'audit-log [userId] [limit]',
       'audit-summary [userId] [windowMinutes]',
       'verify-store',
+      'backup-manifest',
       'help',
     ],
     sensitiveInputs: [
@@ -429,6 +430,24 @@ export function runAdminCommand({
       action: 'verify-store',
       store: 'persistent',
       counts: store.getOperationalStats(),
+    };
+  }
+
+  if (command === 'backup-manifest') {
+    const storePath = store.filePath;
+    if (!fs.existsSync(storePath)) throw new Error('Store file not found');
+    const stats = fs.statSync(storePath);
+    const sha256 = crypto
+      .createHash('sha256')
+      .update(fs.readFileSync(storePath))
+      .digest('hex');
+    return {
+      success: true,
+      action: 'backup-manifest',
+      storeFile: path.basename(storePath),
+      bytes: stats.size,
+      modifiedAt: stats.mtime.toISOString(),
+      sha256,
     };
   }
 

@@ -203,6 +203,7 @@ docker compose exec backend node scripts/commercial-sts-admin.mjs audit-summary 
 
 ```bash
 docker compose exec backend node scripts/commercial-sts-admin.mjs verify-store
+docker compose exec backend node scripts/commercial-sts-admin.mjs backup-manifest
 mkdir -p backup
 docker compose cp backend:/app/data/store.json ./backup/store.json
 chmod 600 ./backup/store.json
@@ -216,7 +217,10 @@ docker compose cp ./backup/store.json backend:/app/data/store.json
 docker compose start backend
 curl --fail https://你的授权域名/healthz
 docker compose exec backend node scripts/commercial-sts-admin.mjs verify-store
+docker compose exec backend node scripts/commercial-sts-admin.mjs backup-manifest
 ```
+
+复制前后保存并比对两次 `backup-manifest` 的 `sha256` 和 `bytes`，可确认文件没有发生非预期变化。该清单不会输出存储路径或内容，但 `store.json` 和其摘要仍应仅保存在受控环境中。
 
 ## 七、更新
 

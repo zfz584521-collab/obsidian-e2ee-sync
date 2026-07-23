@@ -314,6 +314,34 @@ describe('commercial STS admin CLI', () => {
     expect(JSON.stringify(report)).not.toContain('RAW_VERIFY_TOKEN');
   });
 
+  it('creates a backup manifest without exposing persistent store contents or its path', () => {
+    const env = createEnv();
+    runAdminCommand({ env, argv: ['create-user', 'u_10001'] });
+    runAdminCommand({
+      env,
+      argv: ['issue-token', 'u_10001'],
+      generateToken: () => 'RAW_BACKUP_MANIFEST_TOKEN',
+    });
+
+    const stats = fs.statSync(env.STORE_PATH);
+    const expectedSha256 = crypto.createHash('sha256')
+      .update(fs.readFileSync(env.STORE_PATH))
+      .digest('hex');
+    const report = runAdminCommand({ env, argv: ['backup-manifest'] });
+
+    expect(report).toEqual({
+      success: true,
+      action: 'backup-manifest',
+      storeFile: 'store.json',
+      bytes: stats.size,
+      modifiedAt: stats.mtime.toISOString(),
+      sha256: expectedSha256,
+    });
+    const serialized = JSON.stringify(report);
+    expect(serialized).not.toContain('RAW_BACKUP_MANIFEST_TOKEN');
+    expect(serialized).not.toContain(env.STORE_PATH);
+  });
+
   it('lists token hashes and revokes by token hash when raw token is unavailable', () => {
     const env = createEnv();
     runAdminCommand({ env, argv: ['create-user', 'u_10001'] });
