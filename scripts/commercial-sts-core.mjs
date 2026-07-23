@@ -36,18 +36,20 @@ export function makeRepoId(userId, vaultId) {
 }
 
 export function redactAuditEvent(event, { deviceSalt = 'device', tokenSalt = 'token' } = {}) {
-  const redacted = { ...event };
-  if (redacted.deviceId) {
-    redacted.deviceIdHash = hashSecret(redacted.deviceId, deviceSalt);
-    delete redacted.deviceId;
+  const redacted = {};
+  for (const field of ['userId', 'vaultId', 'result', 'status', 'createdAt']) {
+    if (event[field] !== undefined) redacted[field] = event[field];
   }
-  if (redacted.authToken) {
-    redacted.authTokenHash = hashSecret(redacted.authToken, tokenSalt);
-    delete redacted.authToken;
+  if (event.deviceId) {
+    redacted.deviceIdHash = hashSecret(event.deviceId, deviceSalt);
+  } else if (event.deviceIdHash) {
+    redacted.deviceIdHash = event.deviceIdHash;
   }
-  delete redacted.accessKeySecret;
-  delete redacted.securityToken;
-  delete redacted.syncPassword;
+  if (event.authToken) {
+    redacted.authTokenHash = hashSecret(event.authToken, tokenSalt);
+  } else if (event.authTokenHash) {
+    redacted.authTokenHash = event.authTokenHash;
+  }
   return redacted;
 }
 

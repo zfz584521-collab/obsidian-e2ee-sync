@@ -227,6 +227,8 @@ npm.cmd run admin:commercial-sts -- audit-summary u_10001 60
 
 审计查询结果只应包含 `deviceIdHash`、`authTokenHash`、状态码和结果，不应包含明文授权令牌、明文设备 ID、AccessKeySecret、SecurityToken 或同步密码。
 
+后端写入审计日志时只保留 `userId`、`vaultId`、`result`、`status`、`createdAt`、`deviceIdHash`、`authTokenHash` 白名单字段。不要把文件路径、笔记正文、云端原始响应体、堆栈或任意调试上下文塞进审计事件。
+
 备份或恢复 `store.json` 前后，可以做一次只读存储校验：
 
 ```powershell

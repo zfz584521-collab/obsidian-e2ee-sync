@@ -196,16 +196,27 @@ describe('commercial STS backend core', () => {
       accessKeySecret: 'secret_should_not_store',
       securityToken: 'security_token_should_not_store',
       syncPassword: 'password_should_not_store',
+      filePath: 'private/note/path.md',
+      noteContent: 'private note body',
+      backendResponse: 'raw cloud response body',
+      unexpected: 'unexpected_should_not_store',
       result: 'success',
+      status: 200,
+      createdAt: 1,
     });
 
-    expect(redacted).toMatchObject({
+    expect(redacted).toEqual({
       userId: 'u_10001',
       result: 'success',
+      status: 200,
+      createdAt: 1,
       deviceIdHash: hashSecret('dev_should_not_store', 'device'),
       authTokenHash: hashSecret('token_should_not_store', 'token'),
     });
     expect(JSON.stringify(redacted)).not.toContain('should_not_store');
+    expect(JSON.stringify(redacted)).not.toContain('private/note/path.md');
+    expect(JSON.stringify(redacted)).not.toContain('private note body');
+    expect(JSON.stringify(redacted)).not.toContain('raw cloud response body');
   });
 
   it('uses deployment-specific salts for stored audit hashes', () => {
