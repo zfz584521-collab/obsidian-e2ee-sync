@@ -140,6 +140,21 @@ export class InMemoryCommercialStore {
       .sort((a, b) => a.tokenHash.localeCompare(b.tokenHash));
   }
 
+  listAllTokens() {
+    return [...this.tokens.entries()]
+      .map(([tokenHash, token]) => ({
+        tokenHash,
+        userId: token.userId,
+        status: token.status,
+        expiresAt: token.expiresAt,
+      }))
+      .sort((a, b) => {
+        const left = a.expiresAt || '';
+        const right = b.expiresAt || '';
+        return left.localeCompare(right) || a.userId.localeCompare(b.userId) || a.tokenHash.localeCompare(b.tokenHash);
+      });
+  }
+
   listUsers({ limit = 100 } = {}) {
     return [...this.users.values()]
       .map(user => ({

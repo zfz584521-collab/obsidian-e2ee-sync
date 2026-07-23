@@ -46,6 +46,15 @@ npm.cmd run admin:commercial-sts -- issue-token u_10001 30
 npm.cmd run admin:commercial-sts -- list-tokens u_10001
 ```
 
+查看已经过期或 30 天内即将到期的 active token，用于续费提醒：
+
+```powershell
+npm.cmd run admin:commercial-sts -- renewal-report
+npm.cmd run admin:commercial-sts -- renewal-report 30 200
+```
+
+续费报表不输出明文授权令牌，只输出 `tokenHash`、`userId`、过期时间和剩余天数，便于后续使用 `extend-token-hash` 续期。
+
 查看用户清单、状态、套餐和设备占用：
 
 ```powershell

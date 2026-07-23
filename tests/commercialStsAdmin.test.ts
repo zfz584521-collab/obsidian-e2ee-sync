@@ -388,6 +388,66 @@ describe('commercial STS admin CLI', () => {
     expect(JSON.stringify({ report, token })).not.toContain('RAW_RENEWAL_TOKEN');
   });
 
+  it('reports active tokens that are expired or expiring soon for renewal operations', () => {
+    const env = createEnv();
+    const now = Date.parse('2026-07-23T00:00:00Z');
+    runAdminCommand({ env, argv: ['create-user', 'u_10001'] });
+    runAdminCommand({ env, argv: ['create-user', 'u_20002'] });
+    runAdminCommand({ env, argv: ['create-user', 'u_30003'] });
+    runAdminCommand({
+      env: { ...env, TOKEN_OUTPUT_FILE: path.join(path.dirname(env.STORE_PATH), 'expired.secret') },
+      argv: ['issue-token', 'u_10001', '1'],
+      now: now - 2 * 24 * 60 * 60 * 1000,
+      generateToken: () => 'RAW_EXPIRED_RENEWAL_TOKEN',
+    });
+    runAdminCommand({
+      env: { ...env, TOKEN_OUTPUT_FILE: path.join(path.dirname(env.STORE_PATH), 'soon.secret') },
+      argv: ['issue-token', 'u_20002', '5'],
+      now,
+      generateToken: () => 'RAW_SOON_RENEWAL_TOKEN',
+    });
+    runAdminCommand({
+      env: { ...env, TOKEN_OUTPUT_FILE: path.join(path.dirname(env.STORE_PATH), 'later.secret') },
+      argv: ['issue-token', 'u_30003', '60'],
+      now,
+      generateToken: () => 'RAW_LATER_RENEWAL_TOKEN',
+    });
+
+    const report = runAdminCommand({
+      env,
+      argv: ['renewal-report', '30', '10'],
+      now,
+    });
+
+    expect(report).toEqual({
+      success: true,
+      action: 'renewal-report',
+      withinDays: 30,
+      limit: 10,
+      count: 2,
+      tokens: [
+        {
+          tokenHash: hashSecret('RAW_EXPIRED_RENEWAL_TOKEN', env.TOKEN_SALT),
+          userId: 'u_10001',
+          status: 'expired',
+          expiresAt: '2026-07-22T00:00:00.000Z',
+          daysUntilExpiration: -1,
+        },
+        {
+          tokenHash: hashSecret('RAW_SOON_RENEWAL_TOKEN', env.TOKEN_SALT),
+          userId: 'u_20002',
+          status: 'expiring',
+          expiresAt: '2026-07-28T00:00:00.000Z',
+          daysUntilExpiration: 5,
+        },
+      ],
+    });
+    const serialized = JSON.stringify(report);
+    expect(serialized).not.toContain('RAW_EXPIRED_RENEWAL_TOKEN');
+    expect(serialized).not.toContain('RAW_SOON_RENEWAL_TOKEN');
+    expect(serialized).not.toContain('RAW_LATER_RENEWAL_TOKEN');
+  });
+
   it('lists redacted audit logs for operations without exposing raw tokens or devices', () => {
     const env = createEnv();
     runAdminCommand({ env, argv: ['create-user', 'u_10001'] });
@@ -628,5 +688,13 @@ describe('commercial STS admin CLI', () => {
       env: { ...env, TOKEN_HASH_TO_EXTEND: 'missing-hash' },
       argv: ['extend-token-hash'],
     })).toThrow('expiresInDays is required');
+    expect(() => runAdminCommand({
+      env,
+      argv: ['renewal-report', '91'],
+    })).toThrow('withinDays must be an integer between 1 and 90');
+    expect(() => runAdminCommand({
+      env,
+      argv: ['renewal-report', '30', '501'],
+    })).toThrow('limit must be an integer between 1 and 500');
   });
 });

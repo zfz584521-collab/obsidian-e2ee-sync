@@ -70,6 +70,22 @@ function parseListUsersLimit(value) {
   return limit;
 }
 
+function parseRenewalWindowDays(value) {
+  const days = Number(value || 30);
+  if (!Number.isInteger(days) || days < 1 || days > 90) {
+    throw new Error('withinDays must be an integer between 1 and 90');
+  }
+  return days;
+}
+
+function parseRenewalLimit(value) {
+  const limit = Number(value || 100);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
+    throw new Error('limit must be an integer between 1 and 500');
+  }
+  return limit;
+}
+
 function parseAuditWindowMinutes(value) {
   const minutes = Number(value || 60);
   if (!Number.isInteger(minutes) || minutes < 1 || minutes > 10080) {
@@ -118,6 +134,7 @@ function getHelp() {
       'revoke-token',
       'revoke-token-hash',
       'extend-token-hash <expiresInDays>',
+      'renewal-report [withinDays] [limit]',
       'list-devices <userId>',
       'forget-device <userId>',
       'audit-log [userId] [limit]',
@@ -156,6 +173,28 @@ function summarizeTokens(tokens, now) {
   }
 
   return summary;
+}
+
+function buildRenewalReportTokens({ tokens, now, withinDays, limit }) {
+  const maxExpiration = now + withinDays * 24 * 60 * 60 * 1000;
+  return tokens
+    .filter(token => token.status === 'active' && token.expiresAt)
+    .map(token => {
+      const expiresAtMs = Date.parse(token.expiresAt);
+      const daysUntilExpiration = Math.ceil((expiresAtMs - now) / (24 * 60 * 60 * 1000));
+      return {
+        tokenHash: token.tokenHash,
+        userId: token.userId,
+        status: expiresAtMs <= now ? 'expired' : 'expiring',
+        expiresAt: token.expiresAt,
+        daysUntilExpiration,
+        expiresAtMs,
+      };
+    })
+    .filter(token => token.expiresAtMs <= maxExpiration)
+    .sort((a, b) => a.expiresAtMs - b.expiresAtMs || a.userId.localeCompare(b.userId))
+    .slice(0, limit)
+    .map(({ expiresAtMs, ...token }) => token);
 }
 
 export function runAdminCommand({
@@ -255,6 +294,25 @@ export function runAdminCommand({
       action: 'extend-token-hash',
       tokenHash: token.tokenHash,
       expiresAt: token.expiresAt,
+    };
+  }
+
+  if (command === 'renewal-report') {
+    const withinDays = parseRenewalWindowDays(rawUserId);
+    const limit = parseRenewalLimit(rawValue);
+    const tokens = buildRenewalReportTokens({
+      tokens: store.listAllTokens(),
+      now,
+      withinDays,
+      limit,
+    });
+    return {
+      success: true,
+      action: 'renewal-report',
+      withinDays,
+      limit,
+      count: tokens.length,
+      tokens,
     };
   }
 
