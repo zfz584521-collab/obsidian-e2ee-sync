@@ -410,6 +410,16 @@ AccessKey 只放服务器环境变量。
 监控应定期检查 /healthz 和 /readyz；/readyz 只允许输出 provider、存储类型和脱敏计数。
 ```
 
+部署后可用下面的无凭证验收命令检查两个端点：
+
+```powershell
+$env:COMMERCIAL_STS_BASE_URL="https://你的授权域名"
+npm.cmd run check:commercial-sts
+Remove-Item Env:\COMMERCIAL_STS_BASE_URL
+```
+
+命令不发送授权令牌，只输出 `/healthz`、`/readyz` 的状态码，以及 `/readyz` 返回的白名单状态、provider、存储类型和脱敏计数。两端点均为 HTTP `200`，且状态分别为 `ok`、`ready` 才算通过；例如 `/readyz` 为 `404` 表示生产实例尚未部署包含就绪检查的当前后端版本。
+
 ## 十、最小商业闭环
 
 第一版商业闭环可以非常简单：

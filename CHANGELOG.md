@@ -15,6 +15,7 @@
 - 多设备仓库命名空间隔离：远端对象进入 `storagePrefix/repos/{repoId}/`，降低跨仓库串数据风险。
 - 运营 CLI 补充：支持 `list-users` 脱敏用户清单、`support-report` 脱敏客服报告、`renewal-report` 续费提醒、`update-user` 调整套餐与设备额度、`extend-token-hash` 按 token hash 续期、`audit-summary` 输出脱敏审计汇总、`verify-store` 做持久化存储只读校验、`backup-manifest` 生成不含内容或路径的备份校验清单。
 - 发布打包工具：`npm.cmd run package` 会构建、生成发布 zip，并校验包内只有 `main.js`、`manifest.json`、`styles.css` 和用户手册。
+- 无凭证部署验收命令：`npm.cmd run check:commercial-sts` 只检查 `/healthz`、`/readyz` 的状态和白名单元数据，不输出 URL、令牌或响应体。
 
 ### 修复
 
@@ -29,7 +30,7 @@
 
 ### 验证
 
-- 24 个测试文件、172 条测试通过。
+- 25 个测试文件、175 条测试通过。
 - 生产构建通过。
 - 已完成 `https://sync.e2note.com` HTTPS、CORS、401、STS 签发、真实 OSS 前缀 CRUD、跨租户拒绝和双 Obsidian 库双向同步闭环验证。
 

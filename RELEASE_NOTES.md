@@ -17,6 +17,7 @@
 - 改进授权失败、限流、超时和网络异常的中文用户提示。
 - 新增 `list-users`、`support-report`、`renewal-report`、`update-user`、`extend-token-hash`、`audit-summary`、`verify-store`、`backup-manifest` 运营命令，覆盖脱敏用户清单、脱敏客服报告、续费提醒、套餐/设备额度调整、按 token hash 续期、审计汇总、持久化存储只读校验和不含存储路径或内容的备份校验清单。
 - 新增 `npm.cmd run package` 发布打包流程，自动生成安装 zip 并校验包内条目。
+- 新增 `npm.cmd run check:commercial-sts` 无凭证部署验收命令，确认 `/healthz` 与 `/readyz` 已由当前后端版本提供。
 - 审计日志改为白名单字段，避免误写入笔记内容、文件路径或云端原始响应体。
 - STS 上游签发失败统一返回安全的 HTTP `502` 提示，并记录 `provider_error` / `502` 脱敏审计事件，便于运营侧识别云端签发故障。
 
@@ -45,7 +46,7 @@
 
 ### 验证结果
 
-- `npm.cmd test`：24 个测试文件、172 条测试通过。
+- `npm.cmd test`：25 个测试文件、175 条测试通过。
 - `npm.cmd run build`：通过。
 - `npm.cmd run package`：通过，生成 0.1.1 安装 zip。
 - `git diff --check`：通过，仅有 Windows 换行提示。

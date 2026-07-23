@@ -199,6 +199,14 @@ docker compose exec backend node scripts/commercial-sts-admin.mjs audit-summary 
 
 若上游 STS 签发失败，客户端会收到固定的 HTTP `502` 提示，审计汇总会记录 `provider_error` / `502`。先用 `audit-summary` 确认数量，再在受控环境中检查云端配置；不要导出或粘贴上游响应。
 
+部署后，在可信本机执行无凭证端点检查：
+
+```bash
+COMMERCIAL_STS_BASE_URL=https://你的授权域名 npm run check:commercial-sts
+```
+
+检查仅输出两个端点的状态码和 `/readyz` 的白名单状态、provider、存储类型、脱敏计数。`/healthz=200/ok` 且 `/readyz=200/ready` 才表示当前后端版本已就绪；`/readyz=404` 通常表示服务器仍在运行旧部署。
+
 ## 六、备份和恢复
 
 备份文件包含用户和令牌哈希，仍应作为敏感数据保存：
