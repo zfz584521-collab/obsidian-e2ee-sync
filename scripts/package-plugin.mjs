@@ -10,6 +10,17 @@ export const PACKAGE_FILES = [
   'OBSIDIAN_SYNC_PLUGIN_USER_MANUAL.md',
 ];
 
+const FORBIDDEN_PACKAGE_ENTRIES = [
+  'data.json',
+  '.data.json',
+  'node_modules/',
+  'src/',
+  'tests/',
+  '.git/',
+  '.commercial-sts/',
+  '.env',
+];
+
 export function buildPackageName({ version, stamp = createTimestamp() }) {
   if (!version) throw new Error('version is required');
   return `obsidian-sync-plugin-${version}-commercial-sts-${stamp}`;
@@ -44,12 +55,13 @@ export function createReleasePackage({
   }
 
   createZipArchive({ sourceDir: outputDir, zipPath });
+  const zipEntries = validatePackageEntries(listZipEntries(zipPath));
 
   return {
     packageName,
     outputDir,
     zipPath,
-    files: PACKAGE_FILES,
+    files: zipEntries,
   };
 }
 
@@ -72,6 +84,51 @@ function createZipArchive({ sourceDir, zipPath }) {
   if (!fs.existsSync(zipPath) || fs.statSync(zipPath).size <= 0) {
     throw new Error('Failed to create release zip: archive was not written');
   }
+}
+
+function listZipEntries(zipPath) {
+  const command = [
+    'Add-Type -AssemblyName System.IO.Compression.FileSystem;',
+    `$zip=[System.IO.Compression.ZipFile]::OpenRead(${toPowerShellString(zipPath)});`,
+    'try { $zip.Entries | ForEach-Object { $_.FullName } } finally { $zip.Dispose() }',
+  ].join(' ');
+  const result = spawnSync('powershell', ['-NoProfile', '-Command', command], {
+    encoding: 'utf8',
+  });
+
+  if (result.status !== 0) {
+    throw new Error(`Failed to inspect release zip: ${result.stderr || result.stdout}`);
+  }
+
+  return result.stdout
+    .split(/\r?\n/)
+    .map(entry => entry.trim())
+    .filter(Boolean);
+}
+
+export function validatePackageEntries(entries) {
+  const normalized = entries.map(entry => entry.replace(/\\/g, '/'));
+  for (const entry of normalized) {
+    const lower = entry.toLowerCase();
+    const forbidden = FORBIDDEN_PACKAGE_ENTRIES.find(pattern => {
+      const normalizedPattern = pattern.toLowerCase();
+      return normalizedPattern.endsWith('/')
+        ? lower.startsWith(normalizedPattern)
+        : lower === normalizedPattern;
+    });
+    if (forbidden) throw new Error(`Forbidden package entry: ${entry}`);
+    if (!PACKAGE_FILES.includes(entry)) throw new Error(`Unexpected package entry: ${entry}`);
+  }
+
+  for (const file of PACKAGE_FILES) {
+    if (!normalized.includes(file)) throw new Error(`Missing package entry: ${file}`);
+  }
+
+  return PACKAGE_FILES;
+}
+
+function toPowerShellString(value) {
+  return `'${String(value).replace(/'/g, "''")}'`;
 }
 
 function createTimestamp(date = new Date()) {

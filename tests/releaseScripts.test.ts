@@ -6,6 +6,7 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 let syncObsidianVersionFiles: any;
 let buildPackageName: any;
 let collectPackageFiles: any;
+let validatePackageEntries: any;
 
 const tempDirectories: string[] = [];
 
@@ -13,7 +14,7 @@ beforeAll(async () => {
   // @ts-ignore - Node ESM release helper used by tests.
   ({ syncObsidianVersionFiles } = await import('../version-bump.mjs'));
   // @ts-ignore - Node ESM release helper used by tests.
-  ({ buildPackageName, collectPackageFiles } = await import('../scripts/package-plugin.mjs'));
+  ({ buildPackageName, collectPackageFiles, validatePackageEntries } = await import('../scripts/package-plugin.mjs'));
 });
 
 afterEach(() => {
@@ -67,5 +68,34 @@ describe('release helper scripts', () => {
       'styles.css',
       'OBSIDIAN_SYNC_PLUGIN_USER_MANUAL.md',
     ]);
+  });
+
+  it('validates release zip entries and rejects sensitive or development files', () => {
+    expect(validatePackageEntries([
+      'main.js',
+      'manifest.json',
+      'styles.css',
+      'OBSIDIAN_SYNC_PLUGIN_USER_MANUAL.md',
+    ])).toEqual([
+      'main.js',
+      'manifest.json',
+      'styles.css',
+      'OBSIDIAN_SYNC_PLUGIN_USER_MANUAL.md',
+    ]);
+
+    expect(() => validatePackageEntries([
+      'main.js',
+      'manifest.json',
+      'styles.css',
+      'OBSIDIAN_SYNC_PLUGIN_USER_MANUAL.md',
+      'data.json',
+    ])).toThrow('Forbidden package entry: data.json');
+    expect(() => validatePackageEntries([
+      'main.js',
+      'manifest.json',
+      'styles.css',
+      'OBSIDIAN_SYNC_PLUGIN_USER_MANUAL.md',
+      'src/main.ts',
+    ])).toThrow('Forbidden package entry: src/main.ts');
   });
 });
