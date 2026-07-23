@@ -108,6 +108,7 @@ function getHelp() {
       'enable-user <userId>',
       'list-users [limit]',
       'user-status <userId>',
+      'support-report <userId> [auditWindowMinutes]',
       'list-tokens <userId>',
       'revoke-token',
       'revoke-token-hash',
@@ -124,6 +125,30 @@ function getHelp() {
       'DEVICE_ID_TO_FORGET',
     ],
   };
+}
+
+function summarizeTokens(tokens, now) {
+  const summary = {
+    active: 0,
+    expired: 0,
+    revoked: 0,
+    other: 0,
+    total: tokens.length,
+  };
+
+  for (const token of tokens) {
+    if (token.status === 'revoked') {
+      summary.revoked++;
+    } else if (token.expiresAt && Date.parse(token.expiresAt) <= now) {
+      summary.expired++;
+    } else if (token.status === 'active') {
+      summary.active++;
+    } else {
+      summary.other++;
+    }
+  }
+
+  return summary;
 }
 
 export function runAdminCommand({
@@ -225,6 +250,28 @@ export function runAdminCommand({
       plan: user.plan,
       maxDevices: user.maxDevices,
       deviceCount: store.countDevices(userId),
+    };
+  }
+
+  if (command === 'support-report') {
+    const userId = requireUserId(rawUserId);
+    const user = store.getUser(userId);
+    if (!user) throw new Error('User not found');
+    const auditWindowMinutes = parseAuditWindowMinutes(rawValue);
+    return {
+      success: true,
+      action: 'support-report',
+      userId,
+      status: user.status,
+      plan: user.plan,
+      maxDevices: user.maxDevices,
+      deviceCount: store.countDevices(userId),
+      tokens: summarizeTokens(store.listTokens(userId), now),
+      auditWindowMinutes,
+      audit: store.summarizeAuditLogs({
+        userId,
+        sinceMs: now - auditWindowMinutes * 60 * 1000,
+      }),
     };
   }
 

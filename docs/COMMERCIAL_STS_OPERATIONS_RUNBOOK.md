@@ -55,6 +55,15 @@ npm.cmd run admin:commercial-sts -- list-users 200
 
 用户清单不输出授权令牌、令牌哈希、设备 ID 或设备哈希。
 
+排查单个用户问题时，生成脱敏客服报告：
+
+```powershell
+npm.cmd run admin:commercial-sts -- support-report u_10001
+npm.cmd run admin:commercial-sts -- support-report u_10001 60
+```
+
+客服报告只包含用户状态、套餐、设备占用、令牌数量分类和审计汇总，不输出授权令牌、令牌哈希、设备 ID 或设备哈希。
+
 用户从试用升级、降级或调整设备额度时，更新套餐和最大设备数：
 
 ```powershell

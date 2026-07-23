@@ -191,6 +191,104 @@ describe('commercial STS admin CLI', () => {
     expect(JSON.stringify(report)).not.toContain(hashSecret('RAW_DEVICE_ONE', env.DEVICE_SALT));
   });
 
+  it('builds a redacted support report for a single user', () => {
+    const env = createEnv();
+    const now = Date.parse('2026-07-23T04:00:00Z');
+    runAdminCommand({ env, argv: ['create-user', 'u_10001', '2'] });
+    runAdminCommand({
+      env: { ...env, TOKEN_OUTPUT_FILE: path.join(path.dirname(env.STORE_PATH), 'active.secret') },
+      argv: ['issue-token', 'u_10001', '30'],
+      now,
+      generateToken: () => 'RAW_ACTIVE_SUPPORT_TOKEN',
+    });
+    runAdminCommand({
+      env: { ...env, TOKEN_OUTPUT_FILE: path.join(path.dirname(env.STORE_PATH), 'expired.secret') },
+      argv: ['issue-token', 'u_10001', '1'],
+      now: now - 3 * 24 * 60 * 60 * 1000,
+      generateToken: () => 'RAW_EXPIRED_SUPPORT_TOKEN',
+    });
+    const revokedHash = hashSecret('RAW_REVOKED_SUPPORT_TOKEN', env.TOKEN_SALT);
+    runAdminCommand({
+      env: { ...env, TOKEN_OUTPUT_FILE: path.join(path.dirname(env.STORE_PATH), 'revoked.secret') },
+      argv: ['issue-token', 'u_10001'],
+      generateToken: () => 'RAW_REVOKED_SUPPORT_TOKEN',
+    });
+    runAdminCommand({
+      env: { ...env, TOKEN_HASH_TO_REVOKE: revokedHash },
+      argv: ['revoke-token-hash'],
+    });
+
+    const deviceIdHash = hashSecret('RAW_SUPPORT_DEVICE', env.DEVICE_SALT);
+    const storeData = JSON.parse(fs.readFileSync(env.STORE_PATH, 'utf8'));
+    storeData.devices = [
+      {
+        key: `u_10001:${deviceIdHash}`,
+        value: {
+          userId: 'u_10001',
+          deviceIdHash,
+          firstSeenAt: 1,
+          lastSeenAt: 2,
+        },
+      },
+    ];
+    storeData.auditLogs = [
+      {
+        userId: 'u_10001',
+        result: 'success',
+        status: 200,
+        createdAt: now - 5 * 60 * 1000,
+      },
+      {
+        userId: 'u_10001',
+        result: 'failed',
+        status: 401,
+        createdAt: now - 10 * 60 * 1000,
+      },
+    ];
+    fs.writeFileSync(env.STORE_PATH, JSON.stringify(storeData, null, 2), 'utf8');
+
+    const report = runAdminCommand({
+      env,
+      argv: ['support-report', 'u_10001', '60'],
+      now,
+    });
+
+    expect(report).toEqual({
+      success: true,
+      action: 'support-report',
+      userId: 'u_10001',
+      status: 'active',
+      plan: 'starter',
+      maxDevices: 2,
+      deviceCount: 1,
+      tokens: {
+        active: 1,
+        expired: 1,
+        revoked: 1,
+        other: 0,
+        total: 3,
+      },
+      auditWindowMinutes: 60,
+      audit: {
+        total: 2,
+        byResult: {
+          failed: 1,
+          success: 1,
+        },
+        byStatus: {
+          '200': 1,
+          '401': 1,
+        },
+      },
+    });
+    const serialized = JSON.stringify(report);
+    expect(serialized).not.toContain('RAW_ACTIVE_SUPPORT_TOKEN');
+    expect(serialized).not.toContain('RAW_EXPIRED_SUPPORT_TOKEN');
+    expect(serialized).not.toContain('RAW_REVOKED_SUPPORT_TOKEN');
+    expect(serialized).not.toContain(revokedHash);
+    expect(serialized).not.toContain(deviceIdHash);
+  });
+
   it('verifies the persistent store with redacted operational counts', () => {
     const env = createEnv();
     runAdminCommand({ env, argv: ['create-user', 'u_10001'] });

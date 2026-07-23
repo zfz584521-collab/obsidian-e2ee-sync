@@ -114,6 +114,13 @@ docker compose exec backend node scripts/commercial-sts-admin.mjs list-users
 docker compose exec backend node scripts/commercial-sts-admin.mjs list-users 200
 ```
 
+排查单个用户问题时生成脱敏客服报告：
+
+```bash
+docker compose exec backend node scripts/commercial-sts-admin.mjs support-report customer_001
+docker compose exec backend node scripts/commercial-sts-admin.mjs support-report customer_001 60
+```
+
 升级、降级或调整设备额度：
 
 ```bash
