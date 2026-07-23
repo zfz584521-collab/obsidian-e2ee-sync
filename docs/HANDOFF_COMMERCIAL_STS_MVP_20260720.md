@@ -26,17 +26,18 @@ This handoff records the current commercial STS MVP state after the 2026-07-20 o
 ## Latest Commits
 
 ```text
+5a172cb Update release docs for support report
+9ff6b03 Add commercial STS support report
+b66c906 Update release docs for package verification
+0e4e270 Verify release package contents
+9d0b527 Update commercial STS release docs for user listing
+e8c84cf Add commercial STS user listing
+2c29c29 Add commercial STS MVP handoff
 2711dba Update commercial STS release notes
 2527124 Add commercial STS store verification
 b8c5f53 Add commercial STS user plan updates
 0e55a07 Add commercial STS audit summary
 3862cee Add commercial STS admin CLI help
-207cd3d Sync package lock version
-9040388 Add commercial STS readiness monitoring
-0af4b67 Add release packaging tooling
-77da559 Add commercial STS admin operations
-936e175 Prepare 0.1.1 commercial STS release
-4ceba62 Add commercial STS sync MVP
 ```
 
 ## Verification
