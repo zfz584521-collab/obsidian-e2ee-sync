@@ -15,7 +15,7 @@
 - 新增阿里云 STS/OSS 脱敏预检和冒烟测试脚本。
 - 修复商业 STS 最小权限下测试连接误用 HeadBucket 导致的连接失败。
 - 改进授权失败、限流、超时和网络异常的中文用户提示。
-- 新增 `update-user`、`audit-summary`、`verify-store` 运营命令，覆盖套餐/设备额度调整、审计汇总和持久化存储只读校验。
+- 新增 `list-users`、`update-user`、`audit-summary`、`verify-store` 运营命令，覆盖脱敏用户清单、套餐/设备额度调整、审计汇总和持久化存储只读校验。
 - 新增 `npm.cmd run package` 发布打包流程，自动生成安装 zip。
 
 ### 安装
@@ -43,7 +43,7 @@
 
 ### 验证结果
 
-- `npm.cmd test`：24 个测试文件、164 条测试通过。
+- `npm.cmd test`：24 个测试文件、165 条测试通过。
 - `npm.cmd run build`：通过。
 - `npm.cmd run package`：通过，生成 0.1.1 安装 zip。
 - `git diff --check`：通过，仅有 Windows 换行提示。

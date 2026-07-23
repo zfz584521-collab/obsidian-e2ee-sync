@@ -11,6 +11,7 @@ This handoff records the current commercial STS MVP state after the 2026-07-20 o
   - `update-user <userId> <plan> [maxDevices]`
   - `issue-token <userId> [expiresInDays]`
   - `disable-user <userId>` / `enable-user <userId>`
+  - `list-users [limit]`
   - `list-tokens <userId>` / `revoke-token` / `revoke-token-hash`
   - `list-devices <userId>` / `forget-device <userId>`
   - `audit-log [userId] [limit]`
@@ -42,7 +43,7 @@ b8c5f53 Add commercial STS user plan updates
 Last local verification in this pass:
 
 ```text
-npm.cmd test: 24 test files, 164 tests passed
+npm.cmd test: 24 test files, 165 tests passed
 npm.cmd run build: passed
 npm.cmd run package: passed
 git diff --check: passed, with only Windows CRLF warnings
@@ -51,7 +52,7 @@ git diff --check: passed, with only Windows CRLF warnings
 Latest generated install package:
 
 ```text
-release\obsidian-sync-plugin-0.1.1-commercial-sts-20260720-193219.zip
+release\obsidian-sync-plugin-0.1.1-commercial-sts-20260720-193628.zip
 ```
 
 The `release\` directory is intentionally ignored by Git.
