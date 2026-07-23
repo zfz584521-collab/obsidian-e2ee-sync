@@ -23,11 +23,13 @@ This handoff records the current commercial STS MVP state after the 2026-07-20 o
   - `help`
 - Added `/readyz` for redacted readiness and operational counts.
 - Added `npm.cmd run package` for deterministic plugin packaging and zip entry validation.
+- Added an audit log field whitelist so operational logs cannot retain arbitrary request, file path, note content, or raw cloud response fields.
 - Updated release notes and changelog to match the current 0.1.1 state.
 
 ## Latest Commits
 
 ```text
+50fe114 Whitelist commercial STS audit fields
 8f59b05 Add commercial STS renewal report
 8793cba Add commercial STS token renewal
 5a172cb Update release docs for support report
@@ -39,7 +41,6 @@ e8c84cf Add commercial STS user listing
 2c29c29 Add commercial STS MVP handoff
 2711dba Update commercial STS release notes
 2527124 Add commercial STS store verification
-b8c5f53 Add commercial STS user plan updates
 ```
 
 ## Verification
@@ -56,7 +57,7 @@ git diff --check: passed, with only Windows CRLF warnings
 Latest generated install package:
 
 ```text
-release\obsidian-sync-plugin-0.1.1-commercial-sts-20260723-134327.zip
+release\obsidian-sync-plugin-0.1.1-commercial-sts-20260723-134848.zip
 ```
 
 The `release\` directory is intentionally ignored by Git.

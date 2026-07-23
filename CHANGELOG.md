@@ -24,7 +24,7 @@
 ### 安全
 
 - 配置导出会过滤 AccessKey、Secret、SecurityToken、授权令牌、同步密码和设备 ID。
-- 后端示例只保存 token/device hash，审计日志避免记录明文敏感信息。
+- 后端示例只保存 token/device hash，审计日志使用白名单字段，避免记录明文敏感信息、笔记内容、文件路径或云端原始响应体。
 - `.gitignore` 增加 `data.json`、`.commercial-sts/`、`*.secret`、`.env*` 和账号信息文件保护。
 
 ### 验证

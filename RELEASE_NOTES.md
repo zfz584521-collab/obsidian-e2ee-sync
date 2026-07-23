@@ -17,6 +17,7 @@
 - 改进授权失败、限流、超时和网络异常的中文用户提示。
 - 新增 `list-users`、`support-report`、`renewal-report`、`update-user`、`extend-token-hash`、`audit-summary`、`verify-store` 运营命令，覆盖脱敏用户清单、脱敏客服报告、续费提醒、套餐/设备额度调整、按 token hash 续期、审计汇总和持久化存储只读校验。
 - 新增 `npm.cmd run package` 发布打包流程，自动生成安装 zip 并校验包内条目。
+- 审计日志改为白名单字段，避免误写入笔记内容、文件路径或云端原始响应体。
 
 ### 安装
 
