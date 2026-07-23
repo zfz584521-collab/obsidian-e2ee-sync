@@ -14,6 +14,7 @@ This handoff records the current commercial STS MVP state after the 2026-07-20 o
   - `list-users [limit]`
   - `support-report <userId> [auditWindowMinutes]`
   - `list-tokens <userId>` / `revoke-token` / `revoke-token-hash`
+  - `extend-token-hash <expiresInDays>`
   - `list-devices <userId>` / `forget-device <userId>`
   - `audit-log [userId] [limit]`
   - `audit-summary [userId] [windowMinutes]`
@@ -26,6 +27,7 @@ This handoff records the current commercial STS MVP state after the 2026-07-20 o
 ## Latest Commits
 
 ```text
+8793cba Add commercial STS token renewal
 5a172cb Update release docs for support report
 9ff6b03 Add commercial STS support report
 b66c906 Update release docs for package verification
@@ -37,7 +39,6 @@ e8c84cf Add commercial STS user listing
 2527124 Add commercial STS store verification
 b8c5f53 Add commercial STS user plan updates
 0e55a07 Add commercial STS audit summary
-3862cee Add commercial STS admin CLI help
 ```
 
 ## Verification
@@ -45,7 +46,7 @@ b8c5f53 Add commercial STS user plan updates
 Last local verification in this pass:
 
 ```text
-npm.cmd test: 24 test files, 167 tests passed
+npm.cmd test: 24 test files, 168 tests passed
 npm.cmd run build: passed
 npm.cmd run package: passed
 git diff --check: passed, with only Windows CRLF warnings
@@ -54,7 +55,7 @@ git diff --check: passed, with only Windows CRLF warnings
 Latest generated install package:
 
 ```text
-release\obsidian-sync-plugin-0.1.1-commercial-sts-20260723-125514.zip
+release\obsidian-sync-plugin-0.1.1-commercial-sts-20260723-133905.zip
 ```
 
 The `release\` directory is intentionally ignored by Git.
