@@ -26,6 +26,7 @@ This handoff records the current commercial STS MVP state after the 2026-07-20 o
 - Added `backup-manifest` so backup and restore operations can compare a content-free file size and SHA-256 manifest without exposing the store path or data.
 - Added `npm.cmd run package` for deterministic plugin packaging and zip entry validation.
 - Added an audit log field whitelist so operational logs cannot retain arbitrary request, file path, note content, or raw cloud response fields.
+- Added a safe HTTP 502 mapping and redacted `provider_error` audit event for upstream STS issuance failures.
 - Updated release notes and changelog to match the current 0.1.1 state.
 
 ## Latest Commits
@@ -51,7 +52,7 @@ e8c84cf Add commercial STS user listing
 Last local verification in this pass:
 
 ```text
-npm.cmd test: 24 test files, 170 tests passed
+npm.cmd test: 24 test files, 172 tests passed
 npm.cmd run build: passed
 npm.cmd run package: passed
 git diff --check: passed, with only Windows CRLF warnings
@@ -60,7 +61,7 @@ git diff --check: passed, with only Windows CRLF warnings
 Latest generated install package:
 
 ```text
-release\obsidian-sync-plugin-0.1.1-commercial-sts-20260723-135244.zip
+release\obsidian-sync-plugin-0.1.1-commercial-sts-20260723-135624.zip
 ```
 
 The `release\` directory is intentionally ignored by Git.

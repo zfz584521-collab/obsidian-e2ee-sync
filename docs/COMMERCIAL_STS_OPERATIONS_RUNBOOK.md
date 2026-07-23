@@ -229,6 +229,8 @@ npm.cmd run admin:commercial-sts -- audit-summary u_10001 60
 
 后端写入审计日志时只保留 `userId`、`vaultId`、`result`、`status`、`createdAt`、`deviceIdHash`、`authTokenHash` 白名单字段。不要把文件路径、笔记正文、云端原始响应体、堆栈或任意调试上下文塞进审计事件。
 
+当上游 STS 签发失败时，服务返回固定的 HTTP `502` 和“授权服务暂时不可用”提示，并写入 `provider_error` / `502` 脱敏审计事件。排查时先查看 `audit-summary`，确认异常数量后再检查受控环境中的云端配置；不要把上游响应、凭证或请求体写入日志。
+
 备份或恢复 `store.json` 前后，可以做一次只读存储校验：
 
 ```powershell

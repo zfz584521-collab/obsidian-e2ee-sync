@@ -197,6 +197,8 @@ docker compose exec backend node scripts/commercial-sts-admin.mjs audit-summary 
 
 审计查询结果只包含脱敏哈希、状态码和统计字段，不会输出明文授权令牌或设备 ID。
 
+若上游 STS 签发失败，客户端会收到固定的 HTTP `502` 提示，审计汇总会记录 `provider_error` / `502`。先用 `audit-summary` 确认数量，再在受控环境中检查云端配置；不要导出或粘贴上游响应。
+
 ## 六、备份和恢复
 
 备份文件包含用户和令牌哈希，仍应作为敏感数据保存：

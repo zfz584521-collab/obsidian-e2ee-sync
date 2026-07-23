@@ -272,12 +272,26 @@ export async function handleCommercialStsRequest(request, response, {
     return;
   }
 
-  const credentials = await assumeRoleProvider.assumeRole({
-    userId: auth.user.id,
-    vaultId: auth.vaultId,
-    repoId: auth.repoId,
-    storagePrefix: `tenants/${auth.user.id}/vaults/${auth.vaultId}/repos/${auth.repoId}`,
-  });
+  let credentials;
+  try {
+    credentials = await assumeRoleProvider.assumeRole({
+      userId: auth.user.id,
+      vaultId: auth.vaultId,
+      repoId: auth.repoId,
+      storagePrefix: `tenants/${auth.user.id}/vaults/${auth.vaultId}/repos/${auth.repoId}`,
+    });
+  } catch {
+    store.writeAudit({
+      userId: auth.user.id,
+      vaultId: auth.vaultId,
+      deviceId: payload.deviceId,
+      authToken,
+      result: 'provider_error',
+      status: 502,
+    });
+    sendJson(response, 502, { message: '授权服务暂时不可用' });
+    return;
+  }
 
   store.writeAudit({
     userId: auth.user.id,

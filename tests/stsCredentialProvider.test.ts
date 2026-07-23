@@ -156,6 +156,7 @@ describe('StsCredentialProvider', () => {
     [401, '授权令牌无效或已过期'],
     [403, '授权失败，请检查账号状态或套餐限制'],
     [429, '请求过于频繁'],
+    [502, '授权服务暂时不可用，请稍后重试'],
   ])('maps backend status %s to a safe Chinese message', async (status, expectedMessage) => {
     const transport = vi.fn<StsCredentialTransport>().mockResolvedValue({
       status,

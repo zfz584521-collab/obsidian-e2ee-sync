@@ -233,6 +233,49 @@ describe('commercial STS server', () => {
     expect(JSON.stringify(store.auditLogs)).not.toContain('dev_test');
   });
 
+  it('maps STS provider failures to a safe response and redacted audit event', async () => {
+    const config = loadServerConfig({
+      OSS_BUCKET: 'obsidian-sync-commercial',
+      SEED_USER_ID: 'u_10001',
+      SEED_AUTH_TOKEN: 'provider-failure-token',
+      STS_PROVIDER: 'mock',
+    });
+    const store = createSeedStore(config);
+    server = createCommercialStsServer({
+      config,
+      store,
+      assumeRoleProvider: {
+        assumeRole: async () => {
+          throw new Error('upstream response token=RAW_PROVIDER_ERROR_TOKEN');
+        },
+      },
+    });
+    const baseUrl = await listen(server);
+
+    const response = await fetch(`${baseUrl}/api/sync/credentials`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer provider-failure-token',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ vaultId: 'main', deviceId: 'dev_provider_failure' }),
+    });
+    const json = await response.json();
+
+    expect(response.status).toBe(502);
+    expect(json).toEqual({ message: '授权服务暂时不可用' });
+    expect(store.auditLogs).toHaveLength(1);
+    expect(store.auditLogs[0]).toMatchObject({
+      userId: 'u_10001',
+      vaultId: 'main',
+      result: 'provider_error',
+      status: 502,
+    });
+    expect(JSON.stringify({ json, auditLogs: store.auditLogs })).not.toContain('provider-failure-token');
+    expect(JSON.stringify({ json, auditLogs: store.auditLogs })).not.toContain('dev_provider_failure');
+    expect(JSON.stringify({ json, auditLogs: store.auditLogs })).not.toContain('RAW_PROVIDER_ERROR_TOKEN');
+  });
+
   it('rejects unauthorized requests and writes redacted audit logs', async () => {
     const config = loadServerConfig({
       OSS_BUCKET: 'obsidian-sync-commercial',

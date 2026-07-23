@@ -208,6 +208,7 @@ export class StsCredentialProvider {
       409: '仓库状态冲突，需要用户处理',
       413: '请求体过大',
       429: '请求过于频繁',
+      502: '授权服务暂时不可用，请稍后重试',
     };
     const backendMessage = trustedMessages.has(candidate)
       ? candidate
