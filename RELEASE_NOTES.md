@@ -44,7 +44,7 @@
 
 ### 验证结果
 
-- `npm.cmd test`：24 个测试文件、169 条测试通过。
+- `npm.cmd test`：24 个测试文件、170 条测试通过。
 - `npm.cmd run build`：通过。
 - `npm.cmd run package`：通过，生成 0.1.1 安装 zip。
 - `git diff --check`：通过，仅有 Windows 换行提示。
