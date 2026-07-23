@@ -166,6 +166,17 @@ docker compose exec -e TOKEN_HASH_TO_REVOKE backend \
 unset TOKEN_HASH_TO_REVOKE
 ```
 
+用户续费或延长试用时，可以按 token hash 延长有效期，用户无需更换插件里的授权令牌：
+
+```bash
+docker compose exec backend node scripts/commercial-sts-admin.mjs list-tokens customer_001
+read -s TOKEN_HASH_TO_EXTEND
+export TOKEN_HASH_TO_EXTEND
+docker compose exec -e TOKEN_HASH_TO_EXTEND backend \
+  node scripts/commercial-sts-admin.mjs extend-token-hash 30
+unset TOKEN_HASH_TO_EXTEND
+```
+
 查看最近脱敏审计记录：
 
 ```bash

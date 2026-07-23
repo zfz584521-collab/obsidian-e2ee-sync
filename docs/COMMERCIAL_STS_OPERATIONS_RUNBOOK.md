@@ -80,6 +80,16 @@ npm.cmd run admin:commercial-sts -- revoke-token-hash
 Remove-Item Env:\TOKEN_HASH_TO_REVOKE
 ```
 
+用户续费或延长试用时，可以按 token hash 延长有效期，用户无需更换插件里的授权令牌：
+
+```powershell
+$env:TOKEN_HASH_TO_EXTEND="要续期的 token hash"
+npm.cmd run admin:commercial-sts -- extend-token-hash 30
+Remove-Item Env:\TOKEN_HASH_TO_EXTEND
+```
+
+续期会把该 token 状态恢复为 `active`，并把过期时间设置为从当前时间起指定天数后。有效天数允许 1 到 366。
+
 用户在插件里填写：
 
 ```text

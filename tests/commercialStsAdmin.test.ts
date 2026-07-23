@@ -355,6 +355,39 @@ describe('commercial STS admin CLI', () => {
     expect(runAdminCommand({ env, argv: ['list-tokens', 'u_10001'] }).tokens[0].status).toBe('revoked');
   });
 
+  it('extends token expiration by hash without requiring or returning the raw token', () => {
+    const env = createEnv();
+    const now = Date.parse('2026-07-23T00:00:00Z');
+    runAdminCommand({ env, argv: ['create-user', 'u_10001'] });
+    runAdminCommand({
+      env,
+      argv: ['issue-token', 'u_10001', '7'],
+      now,
+      generateToken: () => 'RAW_RENEWAL_TOKEN',
+    });
+    const tokenHash = hashSecret('RAW_RENEWAL_TOKEN', env.TOKEN_SALT);
+
+    const report = runAdminCommand({
+      env: { ...env, TOKEN_HASH_TO_EXTEND: tokenHash },
+      argv: ['extend-token-hash', '30'],
+      now,
+    });
+
+    expect(report).toEqual({
+      success: true,
+      action: 'extend-token-hash',
+      tokenHash,
+      expiresAt: '2026-08-22T00:00:00.000Z',
+    });
+    const token = runAdminCommand({ env, argv: ['list-tokens', 'u_10001'] }).tokens[0];
+    expect(token).toMatchObject({
+      tokenHash,
+      status: 'active',
+      expiresAt: '2026-08-22T00:00:00.000Z',
+    });
+    expect(JSON.stringify({ report, token })).not.toContain('RAW_RENEWAL_TOKEN');
+  });
+
   it('lists redacted audit logs for operations without exposing raw tokens or devices', () => {
     const env = createEnv();
     runAdminCommand({ env, argv: ['create-user', 'u_10001'] });
@@ -583,5 +616,17 @@ describe('commercial STS admin CLI', () => {
       env,
       argv: ['issue-token', 'u_10001', '367'],
     })).toThrow('expiresInDays must be an integer between 1 and 366');
+    expect(() => runAdminCommand({
+      env,
+      argv: ['extend-token-hash', '367'],
+    })).toThrow('expiresInDays must be an integer between 1 and 366');
+    expect(() => runAdminCommand({
+      env,
+      argv: ['extend-token-hash', '30'],
+    })).toThrow('TOKEN_HASH_TO_EXTEND is required');
+    expect(() => runAdminCommand({
+      env: { ...env, TOKEN_HASH_TO_EXTEND: 'missing-hash' },
+      argv: ['extend-token-hash'],
+    })).toThrow('expiresInDays is required');
   });
 });

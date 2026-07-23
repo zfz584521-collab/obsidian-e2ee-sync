@@ -115,6 +115,19 @@ export class InMemoryCommercialStore {
     return true;
   }
 
+  extendTokenByHash(tokenHash, expiresAt) {
+    const entry = this.tokens.get(tokenHash);
+    if (!entry) return null;
+    entry.status = 'active';
+    entry.expiresAt = expiresAt;
+    return {
+      tokenHash,
+      userId: entry.userId,
+      status: entry.status,
+      expiresAt: entry.expiresAt,
+    };
+  }
+
   listTokens(userId) {
     return [...this.tokens.entries()]
       .filter(([, token]) => token.userId === userId)

@@ -87,6 +87,11 @@ function parseTokenExpiresAt(value, now) {
   return new Date(now + days * 24 * 60 * 60 * 1000).toISOString();
 }
 
+function requireTokenExpiresAt(value, now) {
+  if (!value) throw new Error('expiresInDays is required');
+  return parseTokenExpiresAt(value, now);
+}
+
 function writeTokenFile(filePath, token) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, `${token}\n`, {
@@ -112,6 +117,7 @@ function getHelp() {
       'list-tokens <userId>',
       'revoke-token',
       'revoke-token-hash',
+      'extend-token-hash <expiresInDays>',
       'list-devices <userId>',
       'forget-device <userId>',
       'audit-log [userId] [limit]',
@@ -122,6 +128,7 @@ function getHelp() {
     sensitiveInputs: [
       'AUTH_TOKEN_TO_REVOKE',
       'TOKEN_HASH_TO_REVOKE',
+      'TOKEN_HASH_TO_EXTEND',
       'DEVICE_ID_TO_FORGET',
     ],
   };
@@ -236,6 +243,19 @@ export function runAdminCommand({
       throw new Error('Token not found');
     }
     return { success: true, action: 'revoke-token-hash', tokenHash: env.TOKEN_HASH_TO_REVOKE };
+  }
+
+  if (command === 'extend-token-hash') {
+    const expiresAt = requireTokenExpiresAt(rawUserId, now);
+    if (!env.TOKEN_HASH_TO_EXTEND) throw new Error('TOKEN_HASH_TO_EXTEND is required');
+    const token = store.extendTokenByHash(env.TOKEN_HASH_TO_EXTEND, expiresAt);
+    if (!token) throw new Error('Token not found');
+    return {
+      success: true,
+      action: 'extend-token-hash',
+      tokenHash: token.tokenHash,
+      expiresAt: token.expiresAt,
+    };
   }
 
   if (command === 'user-status') {
