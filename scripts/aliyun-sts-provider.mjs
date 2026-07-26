@@ -45,6 +45,29 @@ export function hmacSha256Hex(secret, value) {
     .toLowerCase();
 }
 
+export function signRpcV1Request({
+  method = 'POST',
+  query = {},
+  accessKeySecret,
+}) {
+  const canonicalQuery = canonicalQueryString(query);
+  const stringToSign = [
+    method.toUpperCase(),
+    percentEncode('/'),
+    percentEncode(canonicalQuery),
+  ].join('&');
+  const signature = crypto
+    .createHmac('sha1', `${accessKeySecret}&`)
+    .update(stringToSign)
+    .digest('base64');
+
+  return {
+    canonicalQuery,
+    stringToSign,
+    signature,
+  };
+}
+
 export function signOpenApiRequest({ method = 'POST', canonicalUri = '/', query = {}, headers = {}, body = '', accessKeyId, accessKeySecret }) {
   const payloadHash = sha256Hex(body || '');
   const normalizedHeaders = {
@@ -101,29 +124,34 @@ export function createAliyunAssumeRoleProvider(config, fetchImpl = fetch) {
         query.SourceIdentity = makeRoleSessionName(config.sourceIdentity, vaultId, repoId);
       }
 
-      const endpoint = config.endpoint || 'https://sts.aliyuncs.com';
-      const url = new URL(endpoint);
-      url.search = canonicalQueryString(query);
-      const headers = {
-        host: url.host,
-        'x-acs-action': 'AssumeRole',
-        'x-acs-version': '2015-04-01',
-        'x-acs-date': (config.now ? new Date(config.now()) : new Date()).toISOString().replace(/\.\d{3}Z$/, 'Z'),
-        'x-acs-signature-nonce': config.nonce ? config.nonce() : crypto.randomUUID().replace(/-/g, ''),
+      const rpcQuery = {
+        ...query,
+        AccessKeyId: config.accessKeyId,
+        Action: 'AssumeRole',
+        Format: 'JSON',
+        SignatureMethod: 'HMAC-SHA1',
+        SignatureNonce: config.nonce ? config.nonce() : crypto.randomUUID().replace(/-/g, ''),
+        SignatureVersion: '1.0',
+        Timestamp: (config.now ? new Date(config.now()) : new Date()).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+        Version: '2015-04-01',
       };
-      const signed = signOpenApiRequest({
+      const signed = signRpcV1Request({
         method: 'POST',
-        canonicalUri: '/',
-        query,
-        headers,
-        body: '',
-        accessKeyId: config.accessKeyId,
+        query: rpcQuery,
         accessKeySecret: config.accessKeySecret,
       });
+      const endpoint = config.endpoint || 'https://sts.aliyuncs.com';
+      const body = canonicalQueryString({
+        ...rpcQuery,
+        Signature: signed.signature,
+      });
 
-      const response = await fetchImpl(url.toString(), {
+      const response = await fetchImpl(endpoint, {
         method: 'POST',
-        headers: signed.headers,
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        body,
       });
       const text = await response.text();
       let json = {};

@@ -5,6 +5,7 @@ let canonicalQueryString: any;
 let createAliyunAssumeRoleProvider: any;
 let loadAliyunProviderConfig: any;
 let makeRoleSessionName: any;
+let signRpcV1Request: any;
 let signOpenApiRequest: any;
 let validateAliyunProviderConfig: any;
 
@@ -16,6 +17,7 @@ beforeAll(async () => {
   createAliyunAssumeRoleProvider = module.createAliyunAssumeRoleProvider;
   loadAliyunProviderConfig = module.loadAliyunProviderConfig;
   makeRoleSessionName = module.makeRoleSessionName;
+  signRpcV1Request = module.signRpcV1Request;
   signOpenApiRequest = module.signOpenApiRequest;
   validateAliyunProviderConfig = module.validateAliyunProviderConfig;
 });
@@ -52,6 +54,26 @@ describe('Aliyun STS provider', () => {
       RoleSessionName: 'u 1/main',
       RoleArn: 'acs:ram::123:role/test',
     })).toBe('RoleArn=acs%3Aram%3A%3A123%3Arole%2Ftest&RoleSessionName=u%201%2Fmain');
+  });
+
+  it('signs RPC-style STS requests with HMAC-SHA1', () => {
+    const signed = signRpcV1Request({
+      method: 'POST',
+      query: {
+        AccessKeyId: 'ak',
+        Action: 'AssumeRole',
+        SignatureMethod: 'HMAC-SHA1',
+        SignatureNonce: 'nonce123',
+        SignatureVersion: '1.0',
+        Timestamp: '2026-07-13T09:00:00Z',
+        Version: '2015-04-01',
+      },
+      accessKeySecret: 'secret',
+    });
+
+    expect(signed.canonicalQuery).toContain('Action=AssumeRole');
+    expect(signed.stringToSign).toContain('POST&%2F&');
+    expect(signed.signature).toBe('w2VXGLgLlJeKddb3qZK29DemnxQ=');
   });
 
   it('loads and validates required provider configuration', () => {
@@ -108,12 +130,16 @@ describe('Aliyun STS provider', () => {
       expiration: '2026-07-13T10:00:00Z',
     });
     const [url, options] = fetchImpl.mock.calls[0];
-    expect(url).toContain('RoleArn=acs%3Aram%3A%3A123%3Arole%2Fsync');
-    expect(url).toContain('RoleSessionName=u_10001-main-repo_main');
-    expect(url).toContain('Policy=');
-    expect(options.headers.Authorization).toContain('ACS3-HMAC-SHA256 Credential=ak');
-    expect(options.headers['x-acs-action']).toBe('AssumeRole');
-    expect(options.headers['x-acs-version']).toBe('2015-04-01');
+    expect(url).toBe('https://sts.aliyuncs.com');
+    expect(options.headers['content-type']).toBe('application/x-www-form-urlencoded');
+    expect(options.body).toContain('RoleArn=acs%3Aram%3A%3A123%3Arole%2Fsync');
+    expect(options.body).toContain('RoleSessionName=u_10001-main-repo_main');
+    expect(options.body).toContain('Policy=');
+    expect(options.body).toContain('AccessKeyId=ak');
+    expect(options.body).toContain('Action=AssumeRole');
+    expect(options.body).toContain('Signature=');
+    expect(options.body).toContain('SignatureMethod=HMAC-SHA1');
+    expect(options.body).toContain('Version=2015-04-01');
   });
 
   it('throws a clear error for failed AssumeRole responses', async () => {
