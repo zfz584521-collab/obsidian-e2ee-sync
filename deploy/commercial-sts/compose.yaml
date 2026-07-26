@@ -12,6 +12,8 @@ services:
       PORT: 8788
       STORE_PATH: /app/data/store.json
       PUBLIC_BASE_URL: https://${SYNC_DOMAIN}
+    ports:
+      - "127.0.0.1:8788:8788"
     volumes:
       - commercial_sts_data:/app/data
     networks:
