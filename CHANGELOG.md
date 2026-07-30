@@ -30,9 +30,13 @@
 
 ### 验证
 
-- 25 个测试文件、175 条测试通过。
+- 25 个测试文件、176 条测试通过。
 - 生产构建通过。
-- 已完成 `https://sync.e2note.com` HTTPS、CORS、401、STS 签发、真实 OSS 前缀 CRUD、跨租户拒绝和双 Obsidian 库双向同步闭环验证。
+- `npm.cmd run package` 生成 `obsidian-sync-plugin-0.1.1-commercial-sts-20260730-094309.zip`，包内仅包含四个安装文件。
+- 已在空白插件目录完成解压安装校验：插件 ID、版本、最低 Obsidian 版本、文件 SHA-256 和 `main.js` 语法均通过。
+- 生产 AccessKey 已通过一次性密文流程完成安全轮换；删除旧凭证前后两轮后端、`healthz`、`readyz`、真实 STS 和真实 OSS 五项验收均通过。
+- `sync.e2note.com` 权威解析、公网 TLS、`/healthz`、`/readyz`、CORS 和未授权 `401` 验收通过。
+- 本轮只剩阶段 D 的真实 Obsidian 双端同步验收，不能用接口或历史联调结果代替。
 
 ## [0.1.0] - 2026-06-10
 

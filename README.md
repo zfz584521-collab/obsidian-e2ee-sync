@@ -221,6 +221,8 @@ data.json
 - [多用户仓库隔离说明](docs/MULTI_USER_REPOSITORY_ISOLATION.md)
 - [商业化多用户 OSS 访问方案](docs/COMMERCIAL_MULTI_USER_OSS_ACCESS_PLAN.md)
 - [方案 B：后端 STS 临时凭证交接文档](docs/HANDOFF_COMMERCIAL_STS_PLAN_B.md)
+- [商业 STS 轮换与公网验收交接](docs/HANDOFF_COMMERCIAL_STS_ROTATION_VALIDATED_20260730.md)
+- [真实 Obsidian 双端验收手册](docs/OBSIDIAN_REAL_TWO_DEVICE_ACCEPTANCE_20260730.md)
 
 ---
 
@@ -229,22 +231,24 @@ data.json
 当前版本：
 
 ```text
-0.1.0
+0.1.1
 ```
 
 已验证：
 
 ```text
-12 个测试文件通过
-91 条测试通过
+25 个测试文件通过
+176 条测试通过
 构建成功
+发布包与干净安装校验通过
 ```
 
 当前重点：
 
 ```text
 个人自托管同步可用。
-商业化 STS 临时凭证模式仍在规划 / 后续开发中。
+商业 STS 后端安全轮换、真实 STS/OSS、DNS 与公网 HTTPS 验收已通过。
+真实 Obsidian 双端同步验收待用户在两台设备上完成。
 ```
 
 ---

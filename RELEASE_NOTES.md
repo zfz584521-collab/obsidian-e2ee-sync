@@ -46,11 +46,20 @@
 
 ### 验证结果
 
-- `npm.cmd test`：25 个测试文件、175 条测试通过。
+- `npm.cmd test`：25 个测试文件、176 条测试通过。
 - `npm.cmd run build`：通过。
-- `npm.cmd run package`：通过，生成 0.1.1 安装 zip。
-- `git diff --check`：通过，仅有 Windows 换行提示。
-- 真实环境已完成 HTTPS、CORS、401、STS 签发、OSS 前缀 CRUD、跨租户拒绝和双库双向同步闭环验证。
+- `npm.cmd run package`：通过，生成 `obsidian-sync-plugin-0.1.1-commercial-sts-20260730-094309.zip`。
+- 安装包：仅包含 `main.js`、`manifest.json`、`styles.css` 和 `OBSIDIAN_SYNC_PLUGIN_USER_MANUAL.md`；大小 `161534` 字节，SHA-256 为 `1C7FBC17D3AFC2C6C898DB95EFA4EE9792A8201DE587AEFA6568DD1DA2BD575B`。
+- 敏感项检查：Git 跟踪路径、跟踪内容高置信凭证特征和安装包高置信凭证特征检查通过。
+- 干净安装：在空白插件目录解压后，文件清单、插件 ID、版本 `0.1.1`、最低 Obsidian 版本、源文件/安装文件 SHA-256 和 `main.js` 语法检查通过。
+- `git diff --check`：通过。
+
+### 当前生产边界
+
+- 阶段 B 已完成：生产 AccessKey 已安全轮换，旧凭证已删除，删除前后两轮五项验收均通过。
+- 阶段 C 已完成：权威 DNS、TLS、公网 `/healthz`、`/readyz`、CORS 和未授权 `401` 验收通过。
+- 阶段 D 尚待用户在两台真实 Obsidian 中安装本发布包并完成同一远端仓库的双向同步验收。
+- 详细证据与剩余步骤见 `docs/HANDOFF_COMMERCIAL_STS_ROTATION_VALIDATED_20260730.md` 和 `docs/OBSIDIAN_REAL_TWO_DEVICE_ACCEPTANCE_20260730.md`。
 
 ## v0.1.0 (2026-06-10)
 
