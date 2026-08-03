@@ -8,6 +8,7 @@ import { ConcurrentQueue } from '../utils/concurrency';
 import { IncrementalSync, SyncStatsCollector } from '../utils/incremental';
 import { SyncStateManager } from '../utils/progress';
 import { SyncError, SyncErrorCode } from '../utils/errors';
+import { SyncRulesManager } from './SyncRules';
 
 /** 数据持久化接口 */
 export interface DataPersistence {
@@ -56,6 +57,7 @@ export class SyncManager {
   private localClock: number = 0;
   private statsCollector: SyncStatsCollector;
   private abortController: AbortController | null = null;
+  private rulesManager: SyncRulesManager;
   private static readonly LOCAL_INDEX_KEY = 'local-index';
   private static readonly PLUGIN_VERSION = '0.1.1';
 
@@ -75,6 +77,7 @@ export class SyncManager {
     this.credentialProvider = new StsCredentialProvider();
     this.stateManager = new SyncStateManager();
     this.statsCollector = new SyncStatsCollector();
+    this.rulesManager = new SyncRulesManager(settings.syncRules || []);
   }
 
   /**
@@ -270,7 +273,7 @@ export class SyncManager {
           ...changes.created.map(p => ({ path: p, type: 'create' as const })),
           ...changes.modified.map(p => ({ path: p, type: 'modify' as const })),
           ...changes.deleted.map(p => ({ path: p, type: 'delete' as const })),
-        ],
+        ].filter(c => this.rulesManager.shouldSync(c.path)),
         toDownload: [],
       };
     }
@@ -280,11 +283,13 @@ export class SyncManager {
       this.stateManager.updateProgress({ processed: current, total });
     });
 
-    const toUpload = changes.map(c => ({
-      path: c.path,
-      type: c.type === 'created' ? 'create' as const :
-            c.type === 'modified' ? 'modify' as const : 'delete' as const,
-    }));
+    const toUpload = changes
+      .map(c => ({
+        path: c.path,
+        type: c.type === 'created' ? 'create' as const :
+              c.type === 'modified' ? 'modify' as const : 'delete' as const,
+      }))
+      .filter(c => this.rulesManager.shouldSync(c.path));
 
     return { toUpload, toDownload: [] };
   }
@@ -450,6 +455,12 @@ export class SyncManager {
         processed: i + 1,
         currentFile: event.path,
       });
+
+      // 同步规则过滤：被排除的文件不处理远端变更
+      if (!this.rulesManager.shouldSync(event.path)) {
+        this.stateManager.updateRemoteClock(event.deviceId, event.clock);
+        continue;
+      }
 
       if (event.type === 'delete') {
         if (localChangedPaths.has(event.path)) {
@@ -772,6 +783,7 @@ export class SyncManager {
    */
   updateSettings(settings: SyncSettings): void {
     this.settings = settings;
+    this.rulesManager.setRules(settings.syncRules || []);
     this.credentialProvider.clear();
 
     if (this.crypto.hasKey()) {

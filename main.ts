@@ -4,6 +4,8 @@ import { SyncManager, DataPersistence } from './src/sync/SyncManager';
 import { SyncSettingsTab } from './src/settings/SyncSettingsTab';
 import { CryptoService } from './src/crypto/CryptoService';
 import { SyncLogViewerModal } from './src/utils/Logger';
+import { SyncRulesEditor } from './src/ui/SyncRulesEditor';
+import { SyncRulesManager } from './src/sync/SyncRules';
 
 export default class SyncPlugin extends Plugin {
   settings: SyncSettings;
@@ -52,6 +54,14 @@ export default class SyncPlugin extends Plugin {
       name: '打开同步日志',
       callback: () => {
         this.openSyncLogs();
+      },
+    });
+
+    this.addCommand({
+      id: 'open-sync-rules',
+      name: '打开同步规则',
+      callback: () => {
+        this.openSyncRules();
       },
     });
 
@@ -112,6 +122,15 @@ export default class SyncPlugin extends Plugin {
 
   openSyncLogs(): void {
     new SyncLogViewerModal(this.app).open();
+  }
+
+  openSyncRules(): void {
+    const rulesManager = new SyncRulesManager(this.settings.syncRules || []);
+    new SyncRulesEditor(this.app, rulesManager, async (savedRules) => {
+      this.settings.syncRules = savedRules;
+      await this.saveSettings();
+      this.syncManager.updateSettings(this.settings);
+    }).open();
   }
 
   private onFileChange(file: TFile): void {

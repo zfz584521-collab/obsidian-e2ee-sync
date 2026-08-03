@@ -2,6 +2,8 @@ import { App, PluginSettingTab, Setting, Notice } from 'obsidian';
 import type SyncPlugin from '../../main';
 import { ConfigExporter } from '../utils/ConfigExporter';
 import { ConfigValidator } from '../utils/ConfigValidator';
+import { SyncRulesEditor } from '../ui/SyncRulesEditor';
+import { SyncRulesManager } from '../sync/SyncRules';
 
 export class SyncSettingsTab extends PluginSettingTab {
   plugin: SyncPlugin;
@@ -24,6 +26,7 @@ export class SyncSettingsTab extends PluginSettingTab {
     this.renderBasicSettings(containerEl);
     this.renderMainActions(containerEl);
     this.renderSecondDeviceActions(containerEl);
+    this.renderSyncRules(containerEl);
     this.renderAdvancedSettings(containerEl);
   }
 
@@ -413,6 +416,28 @@ export class SyncSettingsTab extends PluginSettingTab {
         .setButtonText('打开日志')
         .onClick(() => {
           this.plugin.openSyncLogs();
+        }));
+  }
+
+  private renderSyncRules(containerEl: HTMLElement): void {
+    containerEl.createEl('h3', { text: '四、同步规则' });
+
+    const rules = this.plugin.settings.syncRules || [];
+    const enabledCount = rules.filter(r => r.enabled).length;
+
+    new Setting(containerEl)
+      .setName('选择性同步')
+      .setDesc(`配置哪些文件或文件夹需要同步。当前共 ${rules.length} 条规则，${enabledCount} 条启用。`)
+      .addButton(button => button
+        .setButtonText('打开规则编辑器')
+        .onClick(() => {
+          const rulesManager = new SyncRulesManager(this.plugin.settings.syncRules || []);
+          new SyncRulesEditor(this.app, rulesManager, async (savedRules) => {
+            this.plugin.settings.syncRules = savedRules;
+            await this.plugin.saveSettings();
+            this.plugin.syncManager.updateSettings(this.plugin.settings);
+            this.display();
+          }).open();
         }));
   }
 
