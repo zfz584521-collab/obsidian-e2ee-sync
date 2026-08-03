@@ -221,6 +221,7 @@ data.json
 - [多用户仓库隔离说明](docs/MULTI_USER_REPOSITORY_ISOLATION.md)
 - [商业化多用户 OSS 访问方案](docs/COMMERCIAL_MULTI_USER_OSS_ACCESS_PLAN.md)
 - [方案 B：后端 STS 临时凭证交接文档](docs/HANDOFF_COMMERCIAL_STS_PLAN_B.md)
+- [商业 STS 客户授权管理页面](docs/COMMERCIAL_STS_ADMIN_WEB.md)
 - [商业 STS 轮换与公网验收交接](docs/HANDOFF_COMMERCIAL_STS_ROTATION_VALIDATED_20260730.md)
 - [真实 Obsidian 双端验收手册](docs/OBSIDIAN_REAL_TWO_DEVICE_ACCEPTANCE_20260730.md)
 

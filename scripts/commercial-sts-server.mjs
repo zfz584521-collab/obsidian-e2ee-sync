@@ -12,9 +12,11 @@ import {
   validateAliyunProviderConfig,
 } from './aliyun-sts-provider.mjs';
 import { JsonFileCommercialStore } from './commercial-sts-json-store.mjs';
+import { createCommercialAdminPortal } from './commercial-sts-admin-web.mjs';
 
 const DEV_TOKEN_SALT = 'dev-token-salt';
 const DEV_DEVICE_SALT = 'dev-device-salt';
+const ADMIN_PASSWORD_PLACEHOLDER = 'replace_with_a_unique_password_of_at_least_16_characters';
 const MAX_REQUEST_BODY_BYTES = 16 * 1024;
 
 export function loadServerConfig(env = process.env) {
@@ -30,6 +32,11 @@ export function loadServerConfig(env = process.env) {
     seedMaxDevices: Number(env.SEED_MAX_DEVICES || 3),
     rateLimitPerMinute: Number(env.RATE_LIMIT_PER_MINUTE || 60),
     storePath: env.STORE_PATH || '',
+    admin: {
+      enabled: String(env.ADMIN_ENABLED || '').toLowerCase() === 'true',
+      password: env.ADMIN_PASSWORD || '',
+      sessionTtlMs: Number(env.ADMIN_SESSION_TTL_MINUTES || 480) * 60 * 1000,
+    },
     oss: {
       endpoint: env.OSS_ENDPOINT || 'https://s3.oss-cn-hangzhou.aliyuncs.com',
       bucket: env.OSS_BUCKET || '',
@@ -82,7 +89,16 @@ export function validateServerConfig(config) {
       errors.push('PUBLIC_BASE_URL must use HTTPS in production');
     }
   }
-
+  if (config.admin.enabled) {
+    if (config.admin.password.length < 16) {
+      errors.push('ADMIN_PASSWORD must be at least 16 characters when admin is enabled');
+    } else if (config.admin.password === ADMIN_PASSWORD_PLACEHOLDER) {
+      errors.push('ADMIN_PASSWORD must not use the deployment placeholder');
+    }
+    if (!Number.isFinite(config.admin.sessionTtlMs) || config.admin.sessionTtlMs < 5 * 60 * 1000 || config.admin.sessionTtlMs > 24 * 60 * 60 * 1000) {
+      errors.push('ADMIN_SESSION_TTL_MINUTES must be between 5 and 1440');
+    }
+  }
   return { valid: errors.length === 0, errors, warnings };
 }
 
@@ -177,9 +193,16 @@ export function createCommercialStsServer({
     limit: config.rateLimitPerMinute,
     tokenSalt: config.tokenSalt,
   }),
+  generateAdminToken,
 }) {
+  const adminPortal = createCommercialAdminPortal({
+    config,
+    store,
+    generateToken: generateAdminToken,
+  });
   const server = http.createServer(async (request, response) => {
     try {
+      if (await adminPortal.handle(request, response)) return;
       await handleCommercialStsRequest(request, response, {
         config,
         store,

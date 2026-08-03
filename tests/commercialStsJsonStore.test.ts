@@ -34,6 +34,34 @@ function createStore() {
 }
 
 describe('JsonFileCommercialStore', () => {
+  it('reloads external admin changes before the running server reads or persists data', () => {
+    const { filePath, store: runningStore } = createStore();
+    const adminStore = new JsonFileCommercialStore({
+      filePath,
+      tokenSalt: 'production-token-salt',
+      deviceSalt: 'production-device-salt',
+    });
+
+    adminStore.addUser({ id: 'customer_001', status: 'active', maxDevices: 3 });
+    adminStore.addToken({ token: 'NEWLY_ISSUED_TOKEN', userId: 'customer_001' });
+
+    expect(runningStore.getUser('customer_001')).toMatchObject({ status: 'active' });
+    expect(runningStore.findToken('NEWLY_ISSUED_TOKEN')).toMatchObject({
+      userId: 'customer_001',
+      status: 'active',
+    });
+
+    runningStore.writeAudit({ userId: 'customer_001', result: 'success', status: 200 });
+    const reloaded = new JsonFileCommercialStore({
+      filePath,
+      tokenSalt: 'production-token-salt',
+      deviceSalt: 'production-device-salt',
+    });
+    expect(reloaded.getUser('customer_001')).toMatchObject({ status: 'active' });
+    expect(reloaded.findToken('NEWLY_ISSUED_TOKEN')).toMatchObject({ status: 'active' });
+    expect(reloaded.auditLogs).toHaveLength(1);
+  });
+
   it('persists users and hashed tokens without storing raw secrets', () => {
     const { filePath, store } = createStore();
     store.addUser({ id: 'u_10001', status: 'active', maxDevices: 2 });

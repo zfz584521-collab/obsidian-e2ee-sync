@@ -110,6 +110,36 @@ describe('commercial STS server', () => {
     expect(validation.errors).toContain('PUBLIC_BASE_URL must use HTTPS in production');
   });
 
+  it('requires a strong password and bounded session lifetime when the admin page is enabled', () => {
+    const weakPassword = validateServerConfig(loadServerConfig({
+      OSS_BUCKET: 'obsidian-sync-commercial',
+      STS_PROVIDER: 'mock',
+      ADMIN_ENABLED: 'true',
+      ADMIN_PASSWORD: 'short',
+    }));
+    const invalidLifetime = validateServerConfig(loadServerConfig({
+      OSS_BUCKET: 'obsidian-sync-commercial',
+      STS_PROVIDER: 'mock',
+      ADMIN_ENABLED: 'true',
+      ADMIN_PASSWORD: 'correct horse battery staple',
+      ADMIN_SESSION_TTL_MINUTES: '2',
+    }));
+
+    expect(weakPassword.errors).toContain('ADMIN_PASSWORD must be at least 16 characters when admin is enabled');
+    expect(invalidLifetime.errors).toContain('ADMIN_SESSION_TTL_MINUTES must be between 5 and 1440');
+  });
+
+  it('rejects the public admin password placeholder when the admin page is enabled', () => {
+    const validation = validateServerConfig(loadServerConfig({
+      OSS_BUCKET: 'obsidian-sync-commercial',
+      STS_PROVIDER: 'mock',
+      ADMIN_ENABLED: 'true',
+      ADMIN_PASSWORD: 'replace_with_a_unique_password_of_at_least_16_characters',
+    }));
+
+    expect(validation.errors).toContain('ADMIN_PASSWORD must not use the deployment placeholder');
+  });
+
   it('accepts a persistent store instead of a seed token in Aliyun mode', () => {
     const config = loadServerConfig({
       OSS_BUCKET: 'obsidian-sync-commercial',

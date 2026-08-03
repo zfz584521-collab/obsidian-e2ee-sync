@@ -8,6 +8,7 @@ const REQUIRED_VARIABLES = [
   'TOKEN_SALT',
   'DEVICE_SALT',
 ];
+const ADMIN_PASSWORD_PLACEHOLDER = 'replace_with_a_unique_password_of_at_least_16_characters';
 
 export function buildPreflightReport(env = process.env) {
   const provider = env.STS_PROVIDER || 'mock';
@@ -17,6 +18,12 @@ export function buildPreflightReport(env = process.env) {
   const missing = REQUIRED_VARIABLES.filter(name => !env[name]);
   if (!env.SEED_AUTH_TOKEN && !env.STORE_PATH) {
     missing.push('SEED_AUTH_TOKEN_OR_STORE_PATH');
+  }
+  if (
+    String(env.ADMIN_ENABLED || '').toLowerCase() === 'true'
+    && (!env.ADMIN_PASSWORD || env.ADMIN_PASSWORD === ADMIN_PASSWORD_PLACEHOLDER)
+  ) {
+    missing.push('ADMIN_PASSWORD');
   }
   const warnings = [];
 

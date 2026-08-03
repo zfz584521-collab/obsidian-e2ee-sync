@@ -94,4 +94,46 @@ describe('commercial STS preflight', () => {
     expect(report.warnings).toContain('PUBLIC_BASE_URL must use HTTPS');
     expect(report.warnings).toContain('OSS_ENDPOINT must use HTTPS');
   });
+
+  it('reports only the missing admin password variable when the admin page is enabled', () => {
+    const report = buildPreflightReport({
+      STS_PROVIDER: 'aliyun',
+      ALIYUN_ACCESS_KEY_ID: 'sensitive-access-key',
+      ALIYUN_ACCESS_KEY_SECRET: 'sensitive-secret',
+      ALIYUN_STS_ROLE_ARN: 'acs:ram::1234567890123456:role/sync-role',
+      OSS_BUCKET: 'private-bucket-name',
+      OSS_ENDPOINT: 'https://s3.oss-cn-hangzhou.aliyuncs.com',
+      PUBLIC_BASE_URL: 'https://sync.example.com',
+      STORE_PATH: '/app/data/store.json',
+      TOKEN_SALT: 'sensitive-token-salt',
+      DEVICE_SALT: 'sensitive-device-salt',
+      ADMIN_ENABLED: 'true',
+      ADMIN_PASSWORD: '',
+    });
+
+    expect(report.ready).toBe(false);
+    expect(report.missing).toEqual(['ADMIN_PASSWORD']);
+    expect(JSON.stringify(report)).not.toContain('sensitive');
+  });
+
+  it('treats the public admin password placeholder as missing', () => {
+    const report = buildPreflightReport({
+      STS_PROVIDER: 'aliyun',
+      ALIYUN_ACCESS_KEY_ID: 'sensitive-access-key',
+      ALIYUN_ACCESS_KEY_SECRET: 'sensitive-secret',
+      ALIYUN_STS_ROLE_ARN: 'acs:ram::1234567890123456:role/sync-role',
+      OSS_BUCKET: 'private-bucket-name',
+      OSS_ENDPOINT: 'https://s3.oss-cn-hangzhou.aliyuncs.com',
+      PUBLIC_BASE_URL: 'https://sync.example.com',
+      STORE_PATH: '/app/data/store.json',
+      TOKEN_SALT: 'sensitive-token-salt',
+      DEVICE_SALT: 'sensitive-device-salt',
+      ADMIN_ENABLED: 'true',
+      ADMIN_PASSWORD: 'replace_with_a_unique_password_of_at_least_16_characters',
+    });
+
+    expect(report.ready).toBe(false);
+    expect(report.missing).toContain('ADMIN_PASSWORD');
+    expect(JSON.stringify(report)).not.toContain('replace_with_a_unique_password');
+  });
 });

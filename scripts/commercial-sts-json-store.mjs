@@ -31,6 +31,10 @@ export class JsonFileCommercialStore extends InMemoryCommercialStore {
     this.auditLogs = Array.isArray(data.auditLogs) ? data.auditLogs : [];
   }
 
+  refresh() {
+    this.load();
+  }
+
   persist() {
     const directory = path.dirname(this.filePath);
     fs.mkdirSync(directory, { recursive: true });
@@ -54,62 +58,122 @@ export class JsonFileCommercialStore extends InMemoryCommercialStore {
   }
 
   addUser(user) {
+    this.refresh();
     super.addUser(user);
     this.persist();
   }
 
   addToken(token) {
+    this.refresh();
     super.addToken(token);
     this.persist();
   }
 
+  findToken(token) {
+    this.refresh();
+    return super.findToken(token);
+  }
+
+  getUser(userId) {
+    this.refresh();
+    return super.getUser(userId);
+  }
+
   setUserStatus(userId, status) {
+    this.refresh();
     const changed = super.setUserStatus(userId, status);
     if (changed) this.persist();
     return changed;
   }
 
   updateUser(userId, updates) {
+    this.refresh();
     const user = super.updateUser(userId, updates);
     if (user) this.persist();
     return user;
   }
 
   setTokenStatus(token, status) {
+    this.refresh();
     const changed = super.setTokenStatus(token, status);
     if (changed) this.persist();
     return changed;
   }
 
   setTokenStatusByHash(tokenHash, status) {
+    this.refresh();
     const changed = super.setTokenStatusByHash(tokenHash, status);
     if (changed) this.persist();
     return changed;
   }
 
   extendTokenByHash(tokenHash, expiresAt) {
+    this.refresh();
     const token = super.extendTokenByHash(tokenHash, expiresAt);
     if (token) this.persist();
     return token;
   }
 
   registerDevice(userId, deviceId, maxDevices) {
+    this.refresh();
     const result = super.registerDevice(userId, deviceId, maxDevices);
     if (result.accepted) this.persist();
     return result;
   }
 
   forgetDevice(userId, deviceId) {
+    this.refresh();
     const result = super.forgetDevice(userId, deviceId);
     if (result.removed) this.persist();
     return result;
   }
 
   writeAudit(event) {
+    this.refresh();
     super.writeAudit(event);
     if (this.auditLogs.length > this.auditLimit) {
       this.auditLogs = this.auditLogs.slice(-this.auditLimit);
     }
     this.persist();
+  }
+
+  listTokens(userId) {
+    this.refresh();
+    return super.listTokens(userId);
+  }
+
+  listAllTokens() {
+    this.refresh();
+    return super.listAllTokens();
+  }
+
+  listUsers(options) {
+    this.refresh();
+    return super.listUsers(options);
+  }
+
+  countDevices(userId) {
+    this.refresh();
+    return super.countDevices(userId);
+  }
+
+  listDevices(userId) {
+    this.refresh();
+    return super.listDevices(userId);
+  }
+
+  listAuditLogs(options) {
+    this.refresh();
+    return super.listAuditLogs(options);
+  }
+
+  summarizeAuditLogs(options) {
+    this.refresh();
+    return super.summarizeAuditLogs(options);
+  }
+
+  getOperationalStats() {
+    this.refresh();
+    return super.getOperationalStats();
   }
 }
