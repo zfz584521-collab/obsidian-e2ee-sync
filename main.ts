@@ -6,6 +6,7 @@ import { CryptoService } from './src/crypto/CryptoService';
 import { SyncLogViewerModal } from './src/utils/Logger';
 import { SyncRulesEditor } from './src/ui/SyncRulesEditor';
 import { SyncRulesManager } from './src/sync/SyncRules';
+import { SyncStatusPanel } from './src/ui/SyncStatusPanel';
 
 export default class SyncPlugin extends Plugin {
   settings: SyncSettings;
@@ -62,6 +63,14 @@ export default class SyncPlugin extends Plugin {
       name: '打开同步规则',
       callback: () => {
         this.openSyncRules();
+      },
+    });
+
+    this.addCommand({
+      id: 'show-sync-status',
+      name: '显示同步状态',
+      callback: () => {
+        new SyncStatusPanel(this.app, this).open();
       },
     });
 

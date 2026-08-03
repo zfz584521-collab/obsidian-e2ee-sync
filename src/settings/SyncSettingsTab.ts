@@ -4,6 +4,7 @@ import { ConfigExporter } from '../utils/ConfigExporter';
 import { ConfigValidator } from '../utils/ConfigValidator';
 import { SyncRulesEditor } from '../ui/SyncRulesEditor';
 import { SyncRulesManager } from '../sync/SyncRules';
+import { SyncStatusPanel } from '../ui/SyncStatusPanel';
 
 export class SyncSettingsTab extends PluginSettingTab {
   plugin: SyncPlugin;
@@ -407,6 +408,15 @@ export class SyncSettingsTab extends PluginSettingTab {
           } catch (error) {
             new Notice(`迁移失败：${error instanceof Error ? error.message : '未知错误'}`);
           }
+        }));
+
+    new Setting(containerEl)
+      .setName('同步状态')
+      .setDesc('查看当前同步状态、进度和统计信息。')
+      .addButton(button => button
+        .setButtonText('打开状态面板')
+        .onClick(() => {
+          new SyncStatusPanel(this.app, this.plugin).open();
         }));
 
     new Setting(containerEl)

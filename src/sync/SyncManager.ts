@@ -674,7 +674,7 @@ export class SyncManager {
     const parts: string[] = [];
     if (result.uploaded > 0) parts.push(`上传 ${result.uploaded}`);
     if (result.downloaded > 0) parts.push(`下载 ${result.downloaded}`);
-    if (result.conflicts > 0) parts.push(`冲突 ${result.conflicts}`);
+    if (result.conflicts > 0) parts.push(`冲突 ${result.conflicts}（已保存冲突副本）`);
 
     if (parts.length === 0) {
       return '同步完成：无变更';
