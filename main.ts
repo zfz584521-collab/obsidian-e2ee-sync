@@ -13,6 +13,9 @@ export default class SyncPlugin extends Plugin {
   syncManager: SyncManager;
   crypto: CryptoService;
   statusBarItem: HTMLElement | null = null;
+  private syncDebounceTimer: number | null = null;
+  private progressUnsub: (() => void) | null = null;
+  private static readonly SYNC_DEBOUNCE_MS = 3000;
 
   async onload(): Promise<void> {
     console.log('[同步插件] 正在加载...');
@@ -98,8 +101,35 @@ export default class SyncPlugin extends Plugin {
       })
     );
 
+    this.registerEvent(
+      this.app.vault.on('rename', (file, oldPath) => {
+        if (file instanceof TFile) {
+          console.log(`[同步插件] 文件已重命名：${oldPath} → ${file.path}`);
+          this.scheduleDebouncedSync();
+        }
+      })
+    );
+
     this.syncManager.initialize().then(() => {
       this.updateStatusBar();
+
+      // 注册进度回调，同步状态变化时自动刷新状态栏
+      this.progressUnsub = this.syncManager.onProgress((progress) => {
+        if (progress.phase === 'completed' || progress.phase === 'error') {
+          this.updateStatusBar();
+        } else if (progress.phase === 'scanning' || progress.phase === 'uploading' || progress.phase === 'downloading') {
+          this.updateStatusBar();
+        }
+      });
+
+      // 启动同步：如果已配置且自动同步启用，加载后立即拉取远端变更
+      if (this.syncManager.isConfigured() && this.settings.autoSync) {
+        console.log('[同步插件] 启动同步：拉取远端变更...');
+        this.syncManager.startSync().then(() => {
+          this.updateStatusBar();
+        });
+      }
+
       console.log('[同步插件] 加载完成');
     });
   }
@@ -124,9 +154,17 @@ export default class SyncPlugin extends Plugin {
     };
 
     this.statusBarItem.empty();
-    this.statusBarItem.createEl('span', {
+    const span = this.statusBarItem.createEl('span', {
       text: statusMap[status] || statusMap.idle,
     });
+
+    // 添加 tooltip 显示上次同步时间
+    const lastSync = this.syncManager.getLastSyncTime();
+    if (lastSync > 0) {
+      const date = new Date(lastSync);
+      const timeStr = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')}`;
+      span.setAttribute('title', `上次同步：${timeStr}`);
+    }
   }
 
   openSyncLogs(): void {
@@ -147,10 +185,36 @@ export default class SyncPlugin extends Plugin {
     if (file.path.startsWith('.sync-')) return;
 
     console.log(`[同步插件] 文件已变更：${file.path}`);
+    this.scheduleDebouncedSync();
   }
 
   private onFileDelete(file: TFile): void {
+    if (file.path.startsWith('.obsidian/')) return;
+    if (file.path.startsWith('.sync-')) return;
+
     console.log(`[同步插件] 文件已删除：${file.path}`);
+    this.scheduleDebouncedSync();
+  }
+
+  /**
+   * 防抖同步：文件变更后延迟触发一次同步，避免频繁操作。
+   * 仅当自动同步启用时才触发。
+   */
+  private scheduleDebouncedSync(): void {
+    if (!this.settings.autoSync) return;
+    if (!this.syncManager.isConfigured()) return;
+    if (this.syncManager.getStatus() === 'syncing') return;
+
+    if (this.syncDebounceTimer !== null) {
+      window.clearTimeout(this.syncDebounceTimer);
+    }
+
+    this.syncDebounceTimer = window.setTimeout(() => {
+      this.syncDebounceTimer = null;
+      this.syncManager.startSync().then(() => {
+        this.updateStatusBar();
+      });
+    }, SyncPlugin.SYNC_DEBOUNCE_MS);
   }
 
   async loadSettings(): Promise<void> {
@@ -181,6 +245,14 @@ export default class SyncPlugin extends Plugin {
 
   onunload(): void {
     console.log('[同步插件] 正在卸载...');
+    if (this.progressUnsub) {
+      this.progressUnsub();
+      this.progressUnsub = null;
+    }
+    if (this.syncDebounceTimer !== null) {
+      window.clearTimeout(this.syncDebounceTimer);
+      this.syncDebounceTimer = null;
+    }
     this.syncManager.destroy();
   }
 }

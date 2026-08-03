@@ -741,6 +741,13 @@ export class SyncManager {
   }
 
   /**
+   * 获取上次同步时间（Unix 毫秒）
+   */
+  getLastSyncTime(): number {
+    return this.stateManager.getState().lastSyncTime;
+  }
+
+  /**
    * 获取同步进度
    */
   getProgress() {
