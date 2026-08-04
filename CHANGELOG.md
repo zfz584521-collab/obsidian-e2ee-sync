@@ -4,6 +4,26 @@
 
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [未发布] - 2026-08-04
+
+### 新增
+
+- 设置页敏感字段（授权服务地址、授权令牌、同步密码、访问密钥密码）输入框加宽至 `max-width:600px`，右侧增加 eye/eye-off 图标切换明文/掩码显示。
+- 高级设置新增「并发上传数」和「并发下载数」配置项，范围 1-50，默认 10。
+- `SyncSettings` 类型新增 `concurrentUploads` / `concurrentDownloads` 字段。
+
+### 改进
+
+- 默认并发从 5/5 提升至 10/10。
+- 上传队列重试次数从 0 改为 3（指数退避），单任务超时从 60 秒延长至 120 秒。
+- `uploadChangesConcurrent` 改为容错模式：单个文件上传失败不再中断整批，错误收集到 `result.errors`，同步结束后统一提示。
+- `SyncSettingsTab` 新增通用 `addSecretField` 方法，统一渲染宽输入框 + 显隐切换。
+
+### 验证
+
+- 26 个测试文件、186 条测试全通过。
+- 生产构建通过。
+
 ## [0.1.1] - 2026-07-17
 
 ### 新增
