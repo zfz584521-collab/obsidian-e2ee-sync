@@ -26,6 +26,8 @@ const completeSettings = (overrides: Partial<SyncSettings> = {}): SyncSettings =
     autoSync: false,
     syncInterval: 0,
     syncRules: [],
+    concurrentUploads: 10,
+    concurrentDownloads: 10,
   };
 
   return {

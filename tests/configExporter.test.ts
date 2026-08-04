@@ -33,6 +33,8 @@ const settings: SyncSettings = {
   autoSync: false,
   syncInterval: 0,
   syncRules: [],
+  concurrentUploads: 10,
+  concurrentDownloads: 10,
 };
 
 function decodeExport(encoded: string): any {

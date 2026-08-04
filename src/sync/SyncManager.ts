@@ -31,8 +31,8 @@ export interface SyncOptions {
 
 /** 默认同步选项 */
 const DEFAULT_SYNC_OPTIONS: SyncOptions = {
-  concurrentUploads: 5,
-  concurrentDownloads: 5,
+  concurrentUploads: 10,
+  concurrentDownloads: 10,
   incremental: true,
   maxFileSize: 100 * 1024 * 1024, // 100MB
 };
@@ -228,9 +228,16 @@ export class SyncManager {
       result.downloaded = pullResult.downloaded;
       result.conflicts = pullResult.conflicts;
 
-      // 上传变更（并发）
+      // 上传变更（并发，单文件失败不中断整批）
       this.stateManager.updateProgress({ phase: 'uploading', total: changes.toUpload.length });
-      result.uploaded = await this.uploadChangesConcurrent(changes.toUpload);
+      const uploadResult = await this.uploadChangesConcurrent(changes.toUpload);
+      result.uploaded = uploadResult.uploaded;
+      for (const f of uploadResult.failed) {
+        result.errors.push(`上传失败：${f.path}（${f.error}）`);
+      }
+      if (uploadResult.failed.length > 0) {
+        result.success = result.errors.length === 0;
+      }
 
       // 保存状态
       await this.localIndex.save();
@@ -296,13 +303,16 @@ export class SyncManager {
 
   /**
    * 并发上传变更
+   * 单文件失败不会中断整批，失败信息收集到 failed 数组返回。
    */
   private async uploadChangesConcurrent(
     changes: Array<{ path: string; type: 'create' | 'modify' | 'delete' }>
-  ): Promise<number> {
-    if (changes.length === 0) return 0;
+  ): Promise<{ uploaded: number; failed: Array<{ path: string; error: string }> }> {
+    if (changes.length === 0) return { uploaded: 0, failed: [] };
 
     let uploaded = 0;
+    const failed: Array<{ path: string; error: string }> = [];
+    const maxConcurrent = this.options.concurrentUploads || 10;
 
     const queue = new ConcurrentQueue(
       async (change: { path: string; type: 'create' | 'modify' | 'delete' }) => {
@@ -310,28 +320,32 @@ export class SyncManager {
           throw new Error('同步已取消');
         }
 
-        try {
-          if (change.type === 'delete') {
-            await this.deleteFile(change.path);
-          } else {
-            await this.uploadFile(change.path, change.type);
-          }
-          uploaded++;
-          this.statsCollector.recordFile(0);
-          this.stateManager.updateProgress({
-            processed: uploaded,
-            currentFile: change.path,
-          });
-        } catch (error) {
-          console.error(`[同步管理器] 上传失败 ${change.path}：`, error);
-          throw error;
+        if (change.type === 'delete') {
+          await this.deleteFile(change.path);
+        } else {
+          await this.uploadFile(change.path, change.type);
         }
+        uploaded++;
+        this.statsCollector.recordFile(0);
+        this.stateManager.updateProgress({
+          processed: uploaded,
+          currentFile: change.path,
+        });
       },
-      { maxConcurrent: this.options.concurrentUploads || 5 }
+      { maxConcurrent, retries: 3, timeout: 120000 }
     );
 
-    await queue.addAll(changes);
-    return uploaded;
+    // 每个文件独立 catch，单文件失败不中断整批
+    const tasks = changes.map(change =>
+      queue.add(change).catch(error => {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.error(`[同步管理器] 上传失败 ${change.path}：`, error);
+        failed.push({ path: change.path, error: errorMsg });
+      })
+    );
+
+    await Promise.all(tasks);
+    return { uploaded, failed };
   }
 
   /**
@@ -792,6 +806,14 @@ export class SyncManager {
     this.settings = settings;
     this.rulesManager.setRules(settings.syncRules || []);
     this.credentialProvider.clear();
+
+    // 同步并发设置到运行时 options
+    if (settings.concurrentUploads && settings.concurrentUploads > 0) {
+      this.options.concurrentUploads = settings.concurrentUploads;
+    }
+    if (settings.concurrentDownloads && settings.concurrentDownloads > 0) {
+      this.options.concurrentDownloads = settings.concurrentDownloads;
+    }
 
     if (this.crypto.hasKey()) {
       this.crypto.clearKey();

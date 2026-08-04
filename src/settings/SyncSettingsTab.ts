@@ -88,78 +88,72 @@ export class SyncSettingsTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
 
-    new Setting(containerEl)
-      .setName('访问密钥密码')
-      .setDesc('对象存储的 SecretKey，输入框会隐藏显示。')
-      .addText(text => {
-        text.inputEl.type = 'password';
-        text
-          .setPlaceholder('SecretKey')
-          .setValue(this.plugin.settings.s3.secretKey)
-          .onChange(async (value) => {
-            this.plugin.settings.s3.secretKey = value;
-            await this.plugin.saveSettings();
-          });
-      });
+    this.addSecretField(
+      containerEl,
+      '访问密钥密码',
+      '对象存储的 SecretKey。点击右侧眼睛图标可切换显示/隐藏。',
+      'SecretKey',
+      this.plugin.settings.s3.secretKey,
+      async (value) => {
+        this.plugin.settings.s3.secretKey = value;
+        await this.plugin.saveSettings();
+      }
+    );
 
-    new Setting(containerEl)
-      .setName('同步密码')
-      .setDesc('自己设置一个密码。所有设备必须填同一个同步密码；忘记后无法解密已同步内容。')
-      .addText(text => {
-        text.inputEl.type = 'password';
-        text
-          .setPlaceholder('请设置同步密码')
-        .setValue(this.plugin.settings.syncPassword)
-        .onChange(async (value) => {
-          this.plugin.settings.syncPassword = value;
-          await this.plugin.saveSettings();
-          this.plugin.syncManager.updateSettings(this.plugin.settings);
-        });
-      });
+    this.addSecretField(
+      containerEl,
+      '同步密码',
+      '自己设置一个密码。所有设备必须填同一个同步密码；忘记后无法解密已同步内容。',
+      '请设置同步密码',
+      this.plugin.settings.syncPassword,
+      async (value) => {
+        this.plugin.settings.syncPassword = value;
+        await this.plugin.saveSettings();
+        this.plugin.syncManager.updateSettings(this.plugin.settings);
+      }
+    );
   }
 
   private renderCommercialSettings(containerEl: HTMLElement): void {
-    new Setting(containerEl)
-      .setName('授权服务地址')
-      .setDesc('由服务提供方给你的同步授权服务地址。')
-      .addText(text => text
-        .setPlaceholder('例如：https://sync.example.com')
-        .setValue(this.plugin.settings.sts.authServerUrl)
-        .onChange(async (value) => {
-          this.plugin.settings.sts.authServerUrl = value.trim();
-          await this.plugin.saveSettings();
-          this.plugin.syncManager.updateSettings(this.plugin.settings);
-        }));
+    this.addSecretField(
+      containerEl,
+      '授权服务地址',
+      '由服务提供方给你的同步授权服务地址。点击右侧眼睛图标可切换显示/隐藏。',
+      '例如：https://sync.example.com',
+      this.plugin.settings.sts.authServerUrl,
+      async (value) => {
+        this.plugin.settings.sts.authServerUrl = value.trim();
+        await this.plugin.saveSettings();
+        this.plugin.syncManager.updateSettings(this.plugin.settings);
+      },
+      { masked: false }
+    );
 
-    new Setting(containerEl)
-      .setName('授权令牌')
-      .setDesc('由服务提供方发放。插件会用它换取短期同步凭证。')
-      .addText(text => {
-        text.inputEl.type = 'password';
-        text
-          .setPlaceholder('授权令牌')
-          .setValue(this.plugin.settings.sts.authToken)
-          .onChange(async (value) => {
-            this.plugin.settings.sts.authToken = value.trim();
-            await this.plugin.saveSettings();
-            this.plugin.syncManager.updateSettings(this.plugin.settings);
-          });
-      });
+    this.addSecretField(
+      containerEl,
+      '授权令牌',
+      '由服务提供方发放。插件会用它换取短期同步凭证。点击右侧眼睛图标可切换显示/隐藏。',
+      '授权令牌',
+      this.plugin.settings.sts.authToken,
+      async (value) => {
+        this.plugin.settings.sts.authToken = value.trim();
+        await this.plugin.saveSettings();
+        this.plugin.syncManager.updateSettings(this.plugin.settings);
+      }
+    );
 
-    new Setting(containerEl)
-      .setName('同步密码')
-      .setDesc('自己设置一个密码。所有设备必须填同一个同步密码；服务端不会知道这个密码。')
-      .addText(text => {
-        text.inputEl.type = 'password';
-        text
-          .setPlaceholder('请设置同步密码')
-          .setValue(this.plugin.settings.syncPassword)
-          .onChange(async (value) => {
-            this.plugin.settings.syncPassword = value;
-            await this.plugin.saveSettings();
-            this.plugin.syncManager.updateSettings(this.plugin.settings);
-          });
-      });
+    this.addSecretField(
+      containerEl,
+      '同步密码',
+      '自己设置一个密码。所有设备必须填同一个同步密码；服务端不会知道这个密码。点击右侧眼睛图标可切换显示/隐藏。',
+      '请设置同步密码',
+      this.plugin.settings.syncPassword,
+      async (value) => {
+        this.plugin.settings.syncPassword = value;
+        await this.plugin.saveSettings();
+        this.plugin.syncManager.updateSettings(this.plugin.settings);
+      }
+    );
   }
 
   private renderMainActions(containerEl: HTMLElement): void {
@@ -339,6 +333,36 @@ export class SyncSettingsTab extends PluginSettingTab {
           }
         }));
 
+    new Setting(containerEl)
+      .setName('并发上传数')
+      .setDesc('同时上传的文件数。默认 10，建议 5-20。值过大可能触发对象存储限流。')
+      .addText(text => text
+        .setPlaceholder('10')
+        .setValue(String(this.plugin.settings.concurrentUploads || 10))
+        .onChange(async (value) => {
+          const num = parseInt(value, 10);
+          if (!isNaN(num) && num >= 1 && num <= 50) {
+            this.plugin.settings.concurrentUploads = num;
+            await this.plugin.saveSettings();
+            this.plugin.syncManager.updateSettings(this.plugin.settings);
+          }
+        }));
+
+    new Setting(containerEl)
+      .setName('并发下载数')
+      .setDesc('同时下载的文件数。默认 10，建议 5-20。当前下载为串行处理，此设置为预留。')
+      .addText(text => text
+        .setPlaceholder('10')
+        .setValue(String(this.plugin.settings.concurrentDownloads || 10))
+        .onChange(async (value) => {
+          const num = parseInt(value, 10);
+          if (!isNaN(num) && num >= 1 && num <= 50) {
+            this.plugin.settings.concurrentDownloads = num;
+            await this.plugin.saveSettings();
+            this.plugin.syncManager.updateSettings(this.plugin.settings);
+          }
+        }));
+
     if (mode === 'sts') {
       new Setting(containerEl)
         .setName('商业 Vault ID')
@@ -457,5 +481,52 @@ export class SyncSettingsTab extends PluginSettingTab {
     this.plugin.settings.repoId = this.plugin.crypto.generateRepoId();
     await this.plugin.saveSettings();
     this.plugin.syncManager.updateSettings(this.plugin.settings);
+  }
+
+  /**
+   * 渲染一个宽输入框 + 显示/隐藏切换按钮的字段。
+   * 默认掩码（password），可点击右侧眼睛图标切换明文/掩码。
+   */
+  private addSecretField(
+    containerEl: HTMLElement,
+    name: string,
+    desc: string,
+    placeholder: string,
+    value: string,
+    onChange: (value: string) => Promise<void> | void,
+    options: { masked?: boolean } = {}
+  ): void {
+    const masked = options.masked !== false;
+    const setting = new Setting(containerEl)
+      .setName(name)
+      .setDesc(desc);
+
+    let textComp: { inputEl: HTMLInputElement } | null = null;
+    setting.addText(text => {
+      textComp = text as unknown as { inputEl: HTMLInputElement };
+      text.inputEl.type = masked ? 'password' : 'text';
+      text.inputEl.addClass('sync-wide-input');
+      text
+        .setPlaceholder(placeholder)
+        .setValue(value)
+        .onChange(async (v) => {
+          await onChange(v);
+        });
+    });
+
+    setting.addExtraButton(btn => {
+      const updateIcon = (isMasked: boolean) => {
+        btn
+          .setIcon(isMasked ? 'eye' : 'eye-off')
+          .setTooltip(isMasked ? '显示明文' : '隐藏');
+      };
+      updateIcon(masked);
+      btn.onClick(() => {
+        if (!textComp) return;
+        const isMasked = textComp.inputEl.type === 'password';
+        textComp.inputEl.type = isMasked ? 'text' : 'password';
+        updateIcon(!isMasked);
+      });
+    });
   }
 }

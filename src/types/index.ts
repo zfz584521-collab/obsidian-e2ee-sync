@@ -80,6 +80,10 @@ export interface SyncSettings {
   syncInterval: number;
   /** 选择性同步规则 */
   syncRules: SyncRule[];
+  /** 并发上传数（高级设置，默认 10） */
+  concurrentUploads: number;
+  /** 并发下载数（高级设置，默认 10） */
+  concurrentDownloads: number;
 }
 
 /** 默认设置 */
@@ -111,6 +115,8 @@ export const DEFAULT_SETTINGS: SyncSettings = {
     { type: 'exclude', pattern: '.trash/**', enabled: true },
     { type: 'exclude', pattern: '.*', enabled: true },
   ],
+  concurrentUploads: 10,
+  concurrentDownloads: 10,
 };
 
 /** 同步事件类型 */

@@ -1,5 +1,12 @@
 /* 同步插件样式 */
 
+/* 宽输入框：用于授权地址、令牌、同步密码等需要完整显示的字段 */
+.sync-wide-input {
+  width: 100% !important;
+  min-width: 360px;
+  max-width: 600px;
+}
+
 /* 状态栏 */
 .sync-status {
   display: flex;
