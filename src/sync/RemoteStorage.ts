@@ -33,6 +33,12 @@ export interface RemoteLayoutStatus {
   legacyLayout: boolean;
 }
 
+export interface RemoteLogEntry {
+  deviceId: string;
+  clock: number;
+  key: string;
+}
+
 export interface RemoteLayoutMigrationResult {
   copied: number;
   skipped: number;
@@ -70,7 +76,7 @@ export class RemoteStorage {
   /**
    * 配置 S3 连接
    */
-  setConfig(config: S3Config): void {
+  setConfig(config: S3Config, abortSignal?: AbortSignal | null): void {
     this.config = config;
     this.storagePrefix = this.normalizeStoragePrefix(config.storagePrefix || '');
     console.log('[远端存储] 已设置配置，端点：', config.endpoint);
@@ -84,7 +90,7 @@ export class RemoteStorage {
         sessionToken: config.securityToken || undefined,
       },
       forcePathStyle: shouldForcePathStyle(config.endpoint),
-      requestHandler: new ObsidianHttpHandler(),
+      requestHandler: new ObsidianHttpHandler(undefined, undefined, abortSignal),
     });
   }
 
@@ -459,6 +465,33 @@ export class RemoteStorage {
     return logs;
   }
 
+  async listLogEntries(): Promise<RemoteLogEntry[]> {
+    const prefix = `${this.namespacePrefix()}${RemoteStorage.LOG_PREFIX}`;
+    const keys = await this.list(prefix);
+    const entries: RemoteLogEntry[] = [];
+
+    for (const key of keys) {
+      if (!key.startsWith(prefix)) continue;
+      const relative = key.slice(prefix.length);
+      const match = relative.match(/^([^/]+)\/(\d+)\.json$/);
+      if (!match) continue;
+
+      try {
+        entries.push({
+          deviceId: decodeURIComponent(match[1]),
+          clock: Number(match[2]),
+          key,
+        });
+      } catch {
+        // Ignore malformed log keys instead of blocking the whole sync.
+      }
+    }
+
+    return entries.sort((left, right) =>
+      left.deviceId.localeCompare(right.deviceId) || left.clock - right.clock
+    );
+  }
+
   /**
    * 下载设备事件日志
    */
@@ -480,7 +513,7 @@ export class RemoteStorage {
           }
           return this.streamToUint8Array(result.Body);
         },
-        this.retryConfig
+        { ...this.retryConfig, maxRetries: 2 }
       );
     } catch (error) {
       throw SyncError.fromError(error);

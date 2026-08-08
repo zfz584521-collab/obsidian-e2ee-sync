@@ -6,7 +6,7 @@ import { StsCredentialProvider } from './StsCredentialProvider';
 import { CryptoService } from '../crypto/CryptoService';
 import { ConcurrentQueue } from '../utils/concurrency';
 import { IncrementalSync, SyncStatsCollector } from '../utils/incremental';
-import { SyncStateManager } from '../utils/progress';
+import { SyncProgress, SyncStateManager } from '../utils/progress';
 import { SyncError, SyncErrorCode } from '../utils/errors';
 import { SyncRulesManager } from './SyncRules';
 
@@ -25,6 +25,12 @@ export interface SyncOptions {
   concurrentDownloads?: number;
   /** 是否使用增量同步 */
   incremental?: boolean;
+  /** 上传后等待远端日志可见的时间（毫秒） */
+  remoteCatchUpDelayMs?: number;
+  /** 上传后追赶拉取次数 */
+  remoteCatchUpAttempts?: number;
+  /** 单个同步阶段的超时时间（毫秒） */
+  stageTimeoutMs?: number;
   /** 单文件大小限制（字节） */
   maxFileSize?: number;
 }
@@ -34,6 +40,9 @@ const DEFAULT_SYNC_OPTIONS: SyncOptions = {
   concurrentUploads: 10,
   concurrentDownloads: 10,
   incremental: true,
+  remoteCatchUpDelayMs: 250,
+  remoteCatchUpAttempts: 2,
+  stageTimeoutMs: 60_000,
   maxFileSize: 100 * 1024 * 1024, // 100MB
 };
 
@@ -59,7 +68,7 @@ export class SyncManager {
   private abortController: AbortController | null = null;
   private rulesManager: SyncRulesManager;
   private static readonly LOCAL_INDEX_KEY = 'local-index';
-  private static readonly PLUGIN_VERSION = '0.1.1';
+  private static readonly PLUGIN_VERSION = '0.1.4';
 
   constructor(
     app: App,
@@ -210,21 +219,27 @@ export class SyncManager {
       this.stateManager.startSync();
 
       // 连接远端存储
-      await this.configureRemoteStorage();
-      await this.initCrypto();
-      await this.remoteStorage.testConnection();
+      await this.runStage('连接远端', 'scanning', async () => {
+        await this.configureRemoteStorage();
+        await this.initCrypto();
+        await this.remoteStorage.testConnection();
+      });
 
       // 确保仓库存在
-      await this.ensureRepo();
+      await this.runStage('读取仓库元数据', 'downloading', () => this.ensureRepo());
 
       // 检测本地变更
-      this.stateManager.updateProgress({ phase: 'scanning' });
-      const changes = await this.detectChanges();
+      const changes = await this.runStage('扫描本地文件', 'scanning', () => this.detectChanges());
 
       // 拉取并应用其他设备的远端变更
-      this.stateManager.updateProgress({ phase: 'downloading' });
-      const remoteEvents = this.collapseRemoteEvents(await this.fetchRemoteEvents());
-      const pullResult = await this.applyRemoteEvents(remoteEvents, changes.toUpload);
+      const remoteEvents = this.collapseRemoteEvents(
+        await this.runStage('读取远端日志', 'downloading', () => this.fetchRemoteEvents(), 0)
+      );
+      const pullResult = await this.runStage(
+        '应用远端变更',
+        'applying',
+        () => this.applyRemoteEvents(remoteEvents, changes.toUpload)
+      );
       result.downloaded = pullResult.downloaded;
       result.conflicts = pullResult.conflicts;
 
@@ -237,6 +252,27 @@ export class SyncManager {
       }
       if (uploadResult.failed.length > 0) {
         result.success = result.errors.length === 0;
+      }
+
+      // 两台设备同时同步时，双方首次拉取都可能早于对方上传。
+      // 上传后做短暂、有界的追赶拉取，让同一轮同步能够发现并应用对端刚写入的日志。
+      if (uploadResult.uploaded > 0) {
+        const attempts = Math.max(1, this.options.remoteCatchUpAttempts || 1);
+        const delayMs = Math.max(0, this.options.remoteCatchUpDelayMs || 0);
+
+        for (let attempt = 0; attempt < attempts; attempt++) {
+          if (delayMs > 0) {
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+          }
+
+          this.stateManager.updateProgress({ phase: 'downloading' });
+          const catchUpEvents = this.collapseRemoteEvents(await this.fetchRemoteEvents());
+          if (catchUpEvents.length === 0) continue;
+
+          const catchUpResult = await this.applyRemoteEvents(catchUpEvents, changes.toUpload);
+          result.downloaded += catchUpResult.downloaded;
+          result.conflicts += catchUpResult.conflicts;
+        }
       }
 
       // 保存状态
@@ -263,6 +299,47 @@ export class SyncManager {
     this.status = 'idle';
     this.abortController = null;
     return result;
+  }
+
+  private async runStage<T>(
+    stage: string,
+    phase: SyncProgress['phase'],
+    operation: () => Promise<T>,
+    timeoutMs?: number
+  ): Promise<T> {
+    this.stateManager.updateProgress({
+      phase,
+      stage,
+      processed: 0,
+      total: 0,
+      currentFile: undefined,
+    });
+
+    // timeoutMs = 0 表示不设阶段级超时，依赖操作内部的 per-item 超时
+    const effectiveTimeout = timeoutMs !== undefined
+      ? timeoutMs
+      : (this.options.stageTimeoutMs || 180_000);
+
+    if (effectiveTimeout <= 0) {
+      return await operation();
+    }
+
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        this.abortController?.abort();
+        reject(new SyncError(
+          SyncErrorCode.CONNECTION_TIMEOUT,
+          `同步在"${stage}"阶段超时`
+        ));
+      }, effectiveTimeout);
+    });
+
+    try {
+      return await Promise.race([operation(), timeout]);
+    } finally {
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+    }
   }
 
   /**
@@ -408,27 +485,101 @@ export class SyncManager {
    * 拉取其他设备尚未处理的事件日志
    */
   private async fetchRemoteEvents(): Promise<SyncEvent[]> {
-    const metadata = await this.remoteStorage.getRepoMetadata(this.settings.repoId) as RepoMetadata | null;
-    if (!metadata?.devices) return [];
+    const entries = (await this.remoteStorage.listLogEntries()).filter(entry =>
+      entry.deviceId !== this.settings.deviceId &&
+      entry.clock > this.stateManager.getRemoteClock(entry.deviceId)
+    );
 
-    const events: SyncEvent[] = [];
+    if (entries.length === 0) return [];
 
-    for (const device of metadata.devices) {
-      if (!device.deviceId || device.deviceId === this.settings.deviceId) continue;
+    let processed = 0;
+    let succeeded = 0;
+    this.stateManager.updateProgress({ total: entries.length, processed: 0 });
 
-      const fromClock = this.stateManager.getRemoteClock(device.deviceId);
-      const logKeys = await this.remoteStorage.listDeviceLogs(device.deviceId, fromClock);
+    const succeededEvents: SyncEvent[] = [];
+    const CHUNK_SIZE = 50; // 每处理 50 条 entry 做一次检查点持久化
 
-      for (const logKey of logKeys.sort()) {
-        const logBytes = await this.remoteStorage.downloadLog(logKey);
-        const encryptedEvent = JSON.parse(new TextDecoder().decode(logBytes)) as EncryptedPackage;
-        const eventBytes = await this.crypto.decryptData(encryptedEvent);
-        const event = JSON.parse(new TextDecoder().decode(eventBytes)) as SyncEvent;
-        events.push(event);
+    // 分块处理：每块完成后更新 remoteClocks 并持久化，实现续传
+    for (let chunkStart = 0; chunkStart < entries.length; chunkStart += CHUNK_SIZE) {
+      if (this.abortController?.signal.aborted) {
+        console.log('[同步管理器] 同步已取消，已处理条目已保存检查点');
+        break;
       }
+
+      const chunk = entries.slice(chunkStart, chunkStart + CHUNK_SIZE);
+
+      const queue = new ConcurrentQueue(
+        async (entry: typeof entries[number]): Promise<SyncEvent> => {
+          if (this.abortController?.signal.aborted) {
+            throw new SyncError(SyncErrorCode.SYNC_ABORTED, '同步已取消');
+          }
+          const logBytes = await this.remoteStorage.downloadLog(entry.key);
+          const encryptedEvent = JSON.parse(new TextDecoder().decode(logBytes)) as EncryptedPackage;
+          const eventBytes = await this.crypto.decryptData(encryptedEvent);
+          const event = JSON.parse(new TextDecoder().decode(eventBytes)) as SyncEvent;
+          return event;
+        },
+        {
+          maxConcurrent: this.options.concurrentDownloads || 10,
+          retries: 1,
+          timeout: 45_000,
+        }
+      );
+
+      // 逐条容错：单条 entry 失败不中断整批
+      const chunkResults = await Promise.all(chunk.map(entry =>
+        queue.add(entry)
+          .then(event => {
+            succeededEvents.push(event);
+            succeeded++;
+            processed++;
+            this.stateManager.updateProgress({ processed, currentFile: event.path });
+            return { entry, event, ok: true as const };
+          })
+          .catch(error => {
+            console.error(`[同步管理器] 读取远端日志失败 ${entry.key}：`, error);
+            processed++;
+            this.stateManager.updateProgress({ processed });
+            return { entry, event: null as SyncEvent | null, ok: false as const };
+          })
+      ));
+
+      // 检查点：按设备计算连续已处理时钟，更新 remoteClocks
+      // entries 已按 (deviceId, clock) 排序，同一设备内 clock 连续递增
+      const byDevice = new Map<string, Array<{ clock: number; ok: boolean }>>();
+      for (const r of chunkResults) {
+        const arr = byDevice.get(r.entry.deviceId) || [];
+        arr.push({ clock: r.entry.clock, ok: r.ok });
+        byDevice.set(r.entry.deviceId, arr);
+      }
+
+      for (const [deviceId, clocks] of byDevice) {
+        clocks.sort((a, b) => a.clock - b.clock);
+        let contiguousMax = this.stateManager.getRemoteClock(deviceId);
+        for (const { clock, ok } of clocks) {
+          if (clock <= contiguousMax) continue;
+          if (ok && clock === contiguousMax + 1) {
+            contiguousMax = clock;
+          } else if (!ok && clock === contiguousMax + 1) {
+            // 失败的 entry 阻断连续性，后续成功的也不推进
+            break;
+          } else {
+            // clock 不连续（远端有缺失），跳过间隙继续
+            if (ok) contiguousMax = clock;
+          }
+        }
+        if (contiguousMax > this.stateManager.getRemoteClock(deviceId)) {
+          this.stateManager.updateRemoteClock(deviceId, contiguousMax);
+        }
+      }
+
+      // 持久化检查点
+      await this.stateManager.save();
+      console.log(`[同步管理器] 检查点：${processed}/${entries.length} 已处理，${succeeded} 成功`);
     }
 
-    return events.sort((a, b) => a.timestamp - b.timestamp || a.clock - b.clock);
+    console.log(`[同步管理器] 远端日志读取完成：${succeeded}/${entries.length} 条成功`);
+    return succeededEvents.sort((a, b) => a.timestamp - b.timestamp || a.clock - b.clock);
   }
 
   private collapseRemoteEvents(events: SyncEvent[]): SyncEvent[] {
@@ -585,7 +736,7 @@ export class SyncManager {
       await this.ensureLocalRepoId();
     }
 
-    this.remoteStorage.setConfig(session.s3);
+    this.remoteStorage.setConfig(session.s3, this.abortController?.signal);
     this.remoteStorage.setNamespace(this.settings.repoId, session.s3.storagePrefix);
   }
 

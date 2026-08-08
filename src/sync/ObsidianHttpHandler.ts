@@ -16,7 +16,11 @@ type RequestFunction = (request: RequestUrlParam) => Promise<RequestUrlResponse>
 export class ObsidianHttpHandler {
   readonly metadata = { handlerProtocol: 'http/1.1' };
 
-  constructor(private readonly request: RequestFunction = requestUrl) {}
+  constructor(
+    private readonly request: RequestFunction = requestUrl,
+    private readonly requestTimeoutMs = 30_000,
+    private readonly abortSignal?: AbortSignal | null,
+  ) {}
 
   async handle(request: SmithyHttpRequest): Promise<{
     response: {
@@ -25,13 +29,15 @@ export class ObsidianHttpHandler {
       body: ReadableStream<Uint8Array>;
     };
   }> {
-    const response = await this.request({
-      url: this.buildUrl(request),
-      method: request.method,
-      headers: this.filterHeaders(request.headers),
-      body: this.toArrayBuffer(request.body),
-      throw: false,
-    });
+    const response = await this.withTimeout(
+      this.request({
+        url: this.buildUrl(request),
+        method: request.method,
+        headers: this.filterHeaders(request.headers),
+        body: this.toArrayBuffer(request.body),
+        throw: false,
+      })
+    );
 
     return {
       response: {
@@ -43,6 +49,34 @@ export class ObsidianHttpHandler {
   }
 
   destroy(): void {}
+
+  private async withTimeout<T>(promise: Promise<T>): Promise<T> {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(
+        () => reject(new Error('对象存储请求超时')),
+        this.requestTimeoutMs
+      );
+    });
+
+    const races: Promise<any>[] = [promise, timeout];
+
+    if (this.abortSignal) {
+      races.push(new Promise<never>((_, reject) => {
+        if (this.abortSignal!.aborted) {
+          reject(new Error('请求已取消'));
+          return;
+        }
+        this.abortSignal!.addEventListener('abort', () => reject(new Error('请求已取消')), { once: true });
+      }));
+    }
+
+    try {
+      return await Promise.race(races);
+    } finally {
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+    }
+  }
 
   private buildUrl(request: SmithyHttpRequest): string {
     const port = request.port ? `:${request.port}` : '';

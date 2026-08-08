@@ -69,9 +69,21 @@ export class SyncError extends Error {
    * 获取用户友好的错误消息
    */
   getUserMessage(): string {
+    if (/^同步在“.+”阶段超时$/.test(this.message)) {
+      return this.message;
+    }
+
+    const safeStsMessages = new Set([
+      '授权服务连接超时，请稍后重试',
+      '无法连接授权服务，请检查网络或服务地址',
+      '授权服务请求失败，请稍后重试',
+    ]);
     if (
       this.message &&
-      /^(获取临时同步凭证失败|缺少授权|授权服务返回)/.test(this.message)
+      (
+        /^(获取临时同步凭证失败|缺少授权|授权服务返回)/.test(this.message) ||
+        safeStsMessages.has(this.message)
+      )
     ) {
       return this.message;
     }
@@ -120,7 +132,8 @@ export class SyncError extends Error {
 
     if (error instanceof Error) {
       const message = error.message.toLowerCase();
-      const code = (error as any).code?.toUpperCase() || '';
+      const rawCode = (error as any).code;
+      const code = typeof rawCode === 'string' ? rawCode.toUpperCase() : String(rawCode || '').toUpperCase();
       const status = (error as any).$metadata?.httpStatusCode;
 
       // S3 错误
