@@ -30,7 +30,8 @@ export class StsCredentialProvider {
 
   constructor(
     private readonly transport: StsCredentialTransport = defaultTransport,
-    private readonly now: () => number = () => Date.now()
+    private readonly now: () => number = () => Date.now(),
+    private readonly requestTimeoutMs = 30_000
   ) {}
 
   async getCredentials(settings: SyncSettings, pluginVersion: string): Promise<StsCredentialSession> {
@@ -62,21 +63,39 @@ export class StsCredentialProvider {
     this.inFlight = null;
   }
 
+  private async withTimeout<T>(promise: Promise<T>): Promise<T> {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(
+        () => reject(new Error('credential request timeout')),
+        this.requestTimeoutMs
+      );
+    });
+
+    try {
+      return await Promise.race([promise, timeout]);
+    } finally {
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+    }
+  }
+
   private async fetchCredentials(settings: SyncSettings, pluginVersion: string): Promise<StsCredentialSession> {
     const url = this.resolveCredentialsUrl(settings.sts.authServerUrl);
     const vaultId = settings.sts.vaultId.trim() || settings.repoId || 'main';
 
     try {
-      const response = await this.transport({
-        url,
-        authToken: settings.sts.authToken,
-        body: {
-          vaultId,
-          repoId: settings.repoId,
-          deviceId: settings.deviceId,
-          pluginVersion,
-        },
-      });
+      const response = await this.withTimeout(
+        this.transport({
+          url,
+          authToken: settings.sts.authToken,
+          body: {
+            vaultId,
+            repoId: settings.repoId,
+            deviceId: settings.deviceId,
+            pluginVersion,
+          },
+        })
+      );
 
       if (response.status < 200 || response.status >= 300) {
         throw new SyncError(
@@ -248,6 +267,7 @@ async function defaultTransport(request: StsCredentialRequest): Promise<{ status
   const response: RequestUrlResponse = await requestUrl({
     url: request.url,
     method: 'POST',
+    throw: false,
     contentType: 'application/json',
     headers: {
       Authorization: `Bearer ${request.authToken}`,

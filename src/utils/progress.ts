@@ -4,6 +4,8 @@
 export interface SyncProgress {
   /** 当前阶段 */
   phase: 'idle' | 'scanning' | 'uploading' | 'downloading' | 'applying' | 'completed' | 'error';
+  /** 用户可见的具体同步阶段 */
+  stage?: string;
   /** 当前处理的文件 */
   currentFile?: string;
   /** 已处理数量 */

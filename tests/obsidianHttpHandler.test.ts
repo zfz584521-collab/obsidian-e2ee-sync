@@ -40,4 +40,25 @@ describe('ObsidianHttpHandler', () => {
     expect(chunk.value).toEqual(new Uint8Array([4, 5, 6]));
     expect(await reader.read()).toEqual({ done: true, value: undefined });
   });
+
+  it('rejects when Obsidian requestUrl never settles', async () => {
+    const request = vi.fn(() => new Promise<never>(() => {}));
+    const handler = new ObsidianHttpHandler(request, 10);
+
+    const outcome = await Promise.race([
+      handler.handle({
+        protocol: 'https:',
+        hostname: 'bucket.oss-cn-hangzhou.aliyuncs.com',
+        path: '/content/test',
+        method: 'GET',
+        headers: {},
+      }).then(
+        () => 'resolved',
+        error => error instanceof Error ? error.message : String(error)
+      ),
+      new Promise<string>(resolve => setTimeout(() => resolve('still pending'), 50)),
+    ]);
+
+    expect(outcome).toBe('对象存储请求超时');
+  });
 });

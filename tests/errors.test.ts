@@ -57,6 +57,19 @@ describe('SyncError', () => {
 
       expect(error.getUserMessage()).toBe('获取临时同步凭证失败：授权令牌无效');
     });
+
+    it('应该保留已脱敏的 STS 连接错误说明', () => {
+      const messages = [
+        '授权服务连接超时，请稍后重试',
+        '无法连接授权服务，请检查网络或服务地址',
+        '授权服务请求失败，请稍后重试',
+      ];
+
+      for (const message of messages) {
+        const error = new SyncError(SyncErrorCode.NETWORK_ERROR, message);
+        expect(error.getUserMessage()).toBe(message);
+      }
+    });
   });
 
   describe('fromError', () => {

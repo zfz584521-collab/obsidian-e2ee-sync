@@ -109,6 +109,12 @@ class SharedRemote {
   metadata = new Map<string, RepoMetadata>();
   legacyMetadata = new Map<string, RepoMetadata>();
   version = 0;
+  beforeListLogEntries?: () => Promise<void>;
+  afterUploadLog?: () => Promise<void>;
+  beforeGetRepoMetadata?: () => Promise<void>;
+  downloadLogDelayMs = 0;
+  downloadLogInFlight = 0;
+  maxDownloadLogInFlight = 0;
 }
 
 class MemoryRemoteStorage {
@@ -152,6 +158,7 @@ class MemoryRemoteStorage {
 
   async uploadLog(deviceId: string, logData: Uint8Array, clock: number): Promise<void> {
     this.remote.logs.set(this.logObjectKey(deviceId, clock), logData.slice());
+    await this.remote.afterUploadLog?.();
   }
 
   async listDeviceLogs(deviceId: string, fromClock = 0): Promise<string[]> {
@@ -162,13 +169,42 @@ class MemoryRemoteStorage {
       .sort();
   }
 
+  async listLogEntries(): Promise<Array<{ deviceId: string; clock: number; key: string }>> {
+    await this.remote.beforeListLogEntries?.();
+    const prefix = `${this.namespacePrefix()}logs/`;
+    return Array.from(this.remote.logs.keys())
+      .filter(key => key.startsWith(prefix))
+      .flatMap(key => {
+        const match = key.slice(prefix.length).match(/^([^/]+)\/(\d+)\.json$/);
+        if (!match) return [];
+        return [{
+          deviceId: decodeURIComponent(match[1]),
+          clock: Number(match[2]),
+          key,
+        }];
+      });
+  }
+
   async downloadLog(logKey: string): Promise<Uint8Array> {
     const data = this.remote.logs.get(logKey);
     if (!data) throw new Error(`Remote log not found: ${logKey}`);
-    return data.slice();
+    this.remote.downloadLogInFlight++;
+    this.remote.maxDownloadLogInFlight = Math.max(
+      this.remote.maxDownloadLogInFlight,
+      this.remote.downloadLogInFlight
+    );
+    try {
+      if (this.remote.downloadLogDelayMs > 0) {
+        await new Promise(resolve => setTimeout(resolve, this.remote.downloadLogDelayMs));
+      }
+      return data.slice();
+    } finally {
+      this.remote.downloadLogInFlight--;
+    }
   }
 
   async getRepoMetadata(repoId: string): Promise<RepoMetadata | null> {
+    await this.remote.beforeGetRepoMetadata?.();
     const metadata = this.remote.metadata.get(this.repoMetadataObjectKey(repoId));
     return metadata ? structuredClone(metadata) : null;
   }
@@ -300,12 +336,14 @@ async function createManager(
   vault: MemoryVault,
   deviceId: string,
   repoId?: string,
-  storagePrefix?: string
+  storagePrefix?: string,
+  concurrentDownloads = 1
 ) {
   const persistence = new MemoryPersistence();
   const manager = new SyncManager(vault as any, persistence, baseSettings(deviceId, repoId, storagePrefix), {
     concurrentUploads: 1,
-    concurrentDownloads: 1,
+    concurrentDownloads,
+    remoteCatchUpDelayMs: 0,
   });
 
   (manager as any).remoteStorage = new MemoryRemoteStorage(remote);
@@ -344,6 +382,84 @@ describe('SyncManager multi-device integration', () => {
     expect(await vaultB.readText('test-a.md')).toBe('# A\n');
     expect(await vaultB.readText('folder/test-b.md')).toBe('folder file\n');
     expect(await vaultB.readText('assets/test.txt')).toBe('asset text\n');
+  });
+
+  it('exchanges files when two vaults start their first sync concurrently', async () => {
+    let initialLists = 0;
+    let releaseInitialLists!: () => void;
+    const initialListBarrier = new Promise<void>(resolve => {
+      releaseInitialLists = resolve;
+    });
+    remote.beforeListLogEntries = async () => {
+      initialLists++;
+      if (initialLists === 2) releaseInitialLists();
+      await initialListBarrier;
+    };
+
+    let uploadedLogs = 0;
+    let releaseUploadedLogs!: () => void;
+    const uploadedLogBarrier = new Promise<void>(resolve => {
+      releaseUploadedLogs = resolve;
+    });
+    remote.afterUploadLog = async () => {
+      uploadedLogs++;
+      if (uploadedLogs === 2) releaseUploadedLogs();
+      await uploadedLogBarrier;
+    };
+
+    vaultA.writeText('from-a.md', 'created in A\n');
+    vaultB.writeText('from-b.md', 'created in B\n');
+
+    const [resultA, resultB] = await Promise.all([
+      managerA.startSync(),
+      managerB.startSync(),
+    ]);
+
+    expect(resultA.success).toBe(true);
+    expect(resultB.success).toBe(true);
+    expect(resultA.downloaded).toBe(1);
+    expect(resultB.downloaded).toBe(1);
+    expect(await vaultA.readText('from-b.md')).toBe('created in B\n');
+    expect(await vaultB.readText('from-a.md')).toBe('created in A\n');
+  });
+
+  it('downloads remote history with the configured concurrency limit', async () => {
+    for (let index = 0; index < 6; index++) {
+      vaultB.writeText(`history-${index}.md`, `remote ${index}\n`);
+    }
+    await managerB.startSync();
+
+    remote.downloadLogDelayMs = 20;
+    remote.maxDownloadLogInFlight = 0;
+    const firstSyncVault = new MemoryVault();
+    const { manager: firstSyncManager } = await createManager(
+      remote,
+      firstSyncVault,
+      'dev-first-history-pull',
+      undefined,
+      undefined,
+      3
+    );
+
+    const result = await firstSyncManager.startSync();
+
+    expect(result.success).toBe(true);
+    expect(result.downloaded).toBe(6);
+    expect(remote.maxDownloadLogInFlight).toBe(3);
+  });
+
+  it('times out with the active stage when repository metadata never settles', async () => {
+    remote.beforeGetRepoMetadata = () => new Promise(() => {});
+    (managerA as any).options.stageTimeoutMs = 100;
+
+    const outcome = await Promise.race([
+      managerA.startSync().then(result => result.errors[0] || 'completed without error'),
+      new Promise<string>(resolve => setTimeout(() => resolve('still syncing'), 250)),
+    ]);
+
+    expect(outcome).toBe('同步在“读取仓库元数据”阶段超时');
+    expect(managerA.getStatus()).toBe('error');
+    expect(managerA.getProgress().stage).toBe('读取仓库元数据');
   });
 
   it('creates a repo namespace before first static sync when repoId is empty', async () => {
@@ -385,6 +501,24 @@ describe('SyncManager multi-device integration', () => {
     expect(downloadA.success).toBe(true);
     expect(downloadA.downloaded).toBe(1);
     expect(await vaultA.readText('test-a.md')).toBe('changed on B\n');
+  });
+
+  it('discovers remote logs even when a concurrent metadata update omitted the source device', async () => {
+    vaultA.writeText('test-a.md', 'created on A\n');
+    await managerA.startSync();
+    remote.metadata.set('repos/repo_multi_device_test/meta/repo.json', {
+      repoId: 'repo_multi_device_test',
+      protocolVersion: '1.0.0',
+      createdAt: Date.now(),
+      devices: [{ deviceId: 'dev-b', name: 'B', lastActive: Date.now() }],
+      retentionDays: 30,
+    });
+
+    const pullOnB = await managerB.startSync();
+
+    expect(pullOnB.success).toBe(true);
+    expect(pullOnB.downloaded).toBe(1);
+    expect(await vaultB.readText('test-a.md')).toBe('created on A\n');
   });
 
   it('keeps the local file and writes a conflict copy for concurrent edits', async () => {

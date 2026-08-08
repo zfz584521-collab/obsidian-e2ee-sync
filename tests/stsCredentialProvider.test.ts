@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { requestUrl } from 'obsidian';
 import { SyncSettings } from '../src/types';
 import { StsCredentialProvider, StsCredentialTransport } from '../src/sync/StsCredentialProvider';
 import { syncLogger } from '../src/utils/Logger';
@@ -171,6 +172,25 @@ describe('StsCredentialProvider', () => {
     await expect(provider.getCredentials(settings(), '0.1.0')).rejects.toThrow(expectedMessage);
   });
 
+  it('keeps HTTP error responses available for safe backend status mapping', async () => {
+    vi.mocked(requestUrl).mockImplementation((options) => {
+      if (typeof options === 'string' || options.throw !== false) {
+        return Promise.reject(new Error('Request failed, status 401')) as ReturnType<typeof requestUrl>;
+      }
+      return Promise.resolve({
+        status: 401,
+        headers: {},
+        arrayBuffer: new ArrayBuffer(0),
+        json: { message: '授权令牌无效或已过期' },
+        text: '',
+      }) as ReturnType<typeof requestUrl>;
+    });
+    const provider = new StsCredentialProvider(undefined, () => Date.parse('2026-07-11T09:00:00Z'));
+
+    await expect(provider.getCredentials(settings(), '0.1.0')).rejects.toThrow('授权令牌无效或已过期');
+    expect(requestUrl).toHaveBeenCalledWith(expect.objectContaining({ throw: false }));
+  });
+
   it('maps transport timeout to a safe Chinese message without leaking raw details', async () => {
     syncLogger.clearLogs();
     const transport = vi.fn<StsCredentialTransport>().mockRejectedValue(
@@ -189,6 +209,25 @@ describe('StsCredentialProvider', () => {
     expect(thrownMessage).toBe('授权服务连接超时，请稍后重试');
     expect(thrownMessage).not.toContain('AUTH_TOKEN_SHOULD_NOT_LOG');
     expect(exportedLogs).not.toContain('AUTH_TOKEN_SHOULD_NOT_LOG');
+  });
+
+  it('times out a credential transport that never settles', async () => {
+    const transport = vi.fn<StsCredentialTransport>(() => new Promise(() => {}));
+    const provider = new StsCredentialProvider(
+      transport,
+      () => Date.parse('2026-07-11T09:00:00Z'),
+      10
+    );
+
+    const outcome = await Promise.race([
+      provider.getCredentials(settings(), '0.1.0').then(
+        () => 'resolved',
+        error => error instanceof Error ? error.message : String(error)
+      ),
+      new Promise<string>(resolve => setTimeout(() => resolve('still pending'), 50)),
+    ]);
+
+    expect(outcome).toBe('授权服务连接超时，请稍后重试');
   });
 
   it('rejects expired or nearly expired temporary credentials', async () => {

@@ -60,6 +60,13 @@ export class SyncStatusPanel extends Modal {
     statusEl.createSpan({ cls: `status-icon ${info.cls}`, text: info.icon });
     statusEl.createSpan({ cls: 'status-text', text: info.text });
 
+    if (status === 'syncing' && progress.stage) {
+      statusCard.createDiv({
+        cls: 'sync-stage-text',
+        text: `当前阶段：${progress.stage}`,
+      });
+    }
+
     // 进度信息
     if (status === 'syncing' && progress.total > 0) {
       const progressEl = statusCard.createDiv({ cls: 'sync-progress' });

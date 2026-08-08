@@ -78,6 +78,42 @@ describe('RemoteStorage', () => {
     });
   });
 
+  describe('listLogEntries', () => {
+    it('discovers device logs from the repository namespace and ignores malformed keys', async () => {
+      const send = vi.fn().mockResolvedValue({
+        Contents: [
+          { Key: 'tenants/user/vaults/main/repos/repo-id/logs/device-a/2.json' },
+          { Key: 'tenants/user/vaults/main/repos/repo-id/logs/device%20b/1.json' },
+          { Key: 'tenants/user/vaults/main/repos/repo-id/logs/not-a-log.txt' },
+        ],
+      });
+      storage.setConfig({
+        endpoint: 'https://oss-cn-hangzhou.aliyuncs.com',
+        bucket: 'test-bucket',
+        accessKey: 'test-key',
+        secretKey: 'test-secret',
+        securityToken: 'test-security-token',
+        region: 'cn-hangzhou',
+        storagePrefix: 'tenants/user/vaults/main',
+      });
+      storage.setNamespace('repo-id');
+      (storage as any).client = { send };
+
+      await expect(storage.listLogEntries()).resolves.toEqual([
+        {
+          deviceId: 'device b',
+          clock: 1,
+          key: 'tenants/user/vaults/main/repos/repo-id/logs/device%20b/1.json',
+        },
+        {
+          deviceId: 'device-a',
+          clock: 2,
+          key: 'tenants/user/vaults/main/repos/repo-id/logs/device-a/2.json',
+        },
+      ]);
+    });
+  });
+
   describe('destroy', () => {
     it('应该清理资源', () => {
       storage.destroy();
